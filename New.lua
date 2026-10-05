@@ -1,520 +1,265 @@
-```
---[[
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
-	Universal Aimbot Module by Exunys © CC0 1.0 Universal (2023)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "WorkingMenu"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = playerGui
 
-	https://github.com/Exunys
+-- Main window
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 360, 0, 290)
+main.Position = UDim2.new(0.5, -180, 0.5, -145)
+main.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+main.BorderSizePixel = 0
+main.Parent = screenGui
 
-]]
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = main
 
---// Luraph Macros
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(90, 140, 255)
+mainStroke.Thickness = 1.5
+mainStroke.Parent = main
 
-if LPH_OBFUSCATED == nil then -- Must wrap in an "if" statement: "The macro 'LPH_NO_VIRTUALIZE' cannot be assigned to. Check if LPH_OBFUSCATED is nil before assigning to macros."
-	LPH_NO_VIRTUALIZE = function(...)
-		return ...
-	end
-end
+-- Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 30)
+title.Position = UDim2.new(0, 10, 0, 10)
+title.BackgroundTransparency = 1
+title.Text = "WORKING MENU"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
 
---// Cache
+-- Team section
+local teamLabel = Instance.new("TextLabel")
+teamLabel.Size = UDim2.new(0, 100, 0, 20)
+teamLabel.Position = UDim2.new(0, 18, 0, 52)
+teamLabel.BackgroundTransparency = 1
+teamLabel.Text = "Team"
+teamLabel.Font = Enum.Font.GothamMedium
+teamLabel.TextSize = 14
+teamLabel.TextColor3 = Color3.fromRGB(180, 190, 220)
+teamLabel.Parent = main
 
-local game, workspace = game, workspace
-local getrawmetatable, pcall, next, tick, getgenv = getrawmetatable, pcall, next, tick, getgenv
-local Vector2new, Vector3zero, CFramenew, Color3fromRGB, Color3fromHSV, Drawingnew, TweenInfonew = Vector2.new, Vector3.zero, CFrame.new, Color3.fromRGB, Color3.fromHSV, Drawing and Drawing.new, TweenInfo.new
-local mousemoverel, mousemoveabs, tablefind, tableremove, stringlower, stringsub, mathclamp = mousemoverel or (Input and Input.MouseMove), mousemoveabs, table.find, table.remove, string.lower, string.sub, math.clamp
-local mouse1press, mouse1release, taskwait = mouse1press, mouse1release, task.wait
-local clonefunction, cloneref = clonefunction or LPH_NO_VIRTUALIZE(function(...)
-	return ...
-end), cloneref or LPH_NO_VIRTUALIZE(function(...)
-	return ...
-end)
+local teamPanel = Instance.new("Frame")
+teamPanel.Size = UDim2.new(1, -36, 0, 52)
+teamPanel.Position = UDim2.new(0, 18, 0, 72)
+teamPanel.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
+teamPanel.BorderSizePixel = 0
+teamPanel.Parent = main
 
-local GameMetatable = getrawmetatable and getrawmetatable(game) or {
-	-- Auxillary functions - if the executor doesn't support "getrawmetatable".
+local teamPanelCorner = Instance.new("UICorner")
+teamPanelCorner.CornerRadius = UDim.new(0, 10)
+teamPanelCorner.Parent = teamPanel
 
-	__index = LPH_NO_VIRTUALIZE(function(self, Index)
-		return self[Index]
-	end),
-
-	__newindex = LPH_NO_VIRTUALIZE(function(self, Index, Value)
-		self[Index] = Value
-	end)
+local teamButtons = {}
+local teamColors = {
+    Red = Color3.fromRGB(255, 90, 90),
+    Blue = Color3.fromRGB(90, 140, 255),
+    Spectator = Color3.fromRGB(150, 150, 180)
 }
 
-local __index = GameMetatable.__index
-local __newindex = GameMetatable.__newindex
+for index, name in ipairs({"Red", "Blue", "Spectator"}) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.33, -8, 1, -10)
+    btn.Position = UDim2.new((index - 1) * 0.33, 5, 0, 5)
+    btn.BackgroundColor3 = teamColors[name]
+    btn.Text = name
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Parent = teamPanel
 
-local getrenderproperty, setrenderproperty = getrenderproperty or __index, setrenderproperty or __newindex
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btn
 
-local _GetService = __index(game, "GetService")
-local GetService = function(Service)
-	return cloneref(_GetService(game, Service))
+    table.insert(teamButtons, btn)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, other in ipairs(teamButtons) do
+            other.BackgroundTransparency = 0
+        end
+        btn.BackgroundTransparency = 0.12
+        print("Selected team:", name)
+    end)
 end
 
---// Services
+-- Settings
+local settingsLabel = Instance.new("TextLabel")
+settingsLabel.Size = UDim2.new(0, 120, 0, 20)
+settingsLabel.Position = UDim2.new(0, 18, 0, 138)
+settingsLabel.BackgroundTransparency = 1
+settingsLabel.Text = "Settings"
+settingsLabel.Font = Enum.Font.GothamMedium
+settingsLabel.TextSize = 14
+settingsLabel.TextColor3 = Color3.fromRGB(180, 190, 220)
+settingsLabel.Parent = main
 
-local RunService = GetService("RunService")
-local UserInputService = GetService("UserInputService")
-local TweenService = GetService("TweenService")
-local Players = GetService("Players")
+local settingsPanel = Instance.new("Frame")
+settingsPanel.Size = UDim2.new(1, -36, 0, 72)
+settingsPanel.Position = UDim2.new(0, 18, 0, 158)
+settingsPanel.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
+settingsPanel.BorderSizePixel = 0
+settingsPanel.Parent = main
 
---// Service Methods
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 10)
+settingsCorner.Parent = settingsPanel
 
-local LocalPlayer = __index(Players, "LocalPlayer")
-local Camera = __index(workspace, "CurrentCamera")
+local streamMode = false
+local streamBtn = Instance.new("TextButton")
+streamBtn.Size = UDim2.new(0.55, -12, 0, 26)
+streamBtn.Position = UDim2.new(0, 10, 0, 10)
+streamBtn.Text = "Stream Mode: Off"
+streamBtn.BackgroundColor3 = Color3.fromRGB(70, 75, 90)
+streamBtn.TextColor3 = Color3.fromRGB(255,255,255)
+streamBtn.Font = Enum.Font.GothamBold
+streamBtn.TextSize = 12
+streamBtn.BorderSizePixel = 0
+streamBtn.Parent = settingsPanel
 
-local FindFirstChild, FindFirstChildOfClass = __index(game, "FindFirstChild"), __index(game, "FindFirstChildOfClass")
-local GetDescendants = __index(game, "GetDescendants")
-local WorldToViewportPoint = __index(Camera, "WorldToViewportPoint")
-local GetPartsObscuringTarget = __index(Camera, "GetPartsObscuringTarget")
-local GetMouseLocation = __index(UserInputService, "GetMouseLocation")
-local GetPlayers = __index(Players, "GetPlayers")
-local GetPlayerFromCharacter = __index(Players, "GetPlayerFromCharacter")
-local Mouse = __index(LocalPlayer, "GetMouse")(LocalPlayer)
-local CameraViewportSize = __index(Camera, "ViewportSize")
+local streamCorner = Instance.new("UICorner")
+streamCorner.CornerRadius = UDim.new(0, 8)
+streamCorner.Parent = streamBtn
 
---// Variables
+streamBtn.MouseButton1Click:Connect(function()
+    streamMode = not streamMode
+    streamBtn.Text = streamMode and "Stream Mode: On" or "Stream Mode: Off"
+    streamBtn.BackgroundColor3 = streamMode and Color3.fromRGB(55,170,110) or Color3.fromRGB(70,75,90)
+end)
 
-local RequiredDistance, Typing, Running, ServiceConnections, Animation, OriginalSensitivity = 2000, false, false, {}
-local Connect, Disconnect = __index(game, "DescendantAdded").Connect
+-- Auto-allow / remember choice (safe pattern)
+local isAutoAllowed = false
+local rememberToggle = Instance.new("TextButton")
+rememberToggle.Size = UDim2.new(0.35, -12, 0, 26)
+rememberToggle.Position = UDim2.new(0.58, 0, 0, 10)
+rememberToggle.Text = "Auto-allow: Off"
+rememberToggle.BackgroundColor3 = Color3.fromRGB(80, 90, 110)
+rememberToggle.TextColor3 = Color3.fromRGB(255,255,255)
+rememberToggle.Font = Enum.Font.GothamBold
+rememberToggle.TextSize = 11
+rememberToggle.BorderSizePixel = 0
+rememberToggle.Parent = settingsPanel
 
-do
-	local TemporaryConnection = Connect(__index(game, "DescendantAdded"), function() end)
-	Disconnect = TemporaryConnection.Disconnect
-	Disconnect(TemporaryConnection)
+local rememberCorner = Instance.new("UICorner")
+rememberCorner.CornerRadius = UDim.new(0, 8)
+rememberCorner.Parent = rememberToggle
+
+rememberToggle.MouseButton1Click:Connect(function()
+    isAutoAllowed = not isAutoAllowed
+    rememberToggle.Text = isAutoAllowed and "Auto-allow: On" or "Auto-allow: Off"
+    rememberToggle.BackgroundColor3 = isAutoAllowed and Color3.fromRGB(80, 160, 110) or Color3.fromRGB(80, 90, 110)
+end)
+
+-- Radius and FOV panel
+local sliderPanel = Instance.new("Frame")
+sliderPanel.Size = UDim2.new(1, -36, 0, 52)
+sliderPanel.Position = UDim2.new(0, 18, 0, 236)
+sliderPanel.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
+sliderPanel.BorderSizePixel = 0
+sliderPanel.Parent = main
+
+local sliderPanelCorner = Instance.new("UICorner")
+sliderPanelCorner.CornerRadius = UDim.new(0, 10)
+sliderPanelCorner.Parent = sliderPanel
+
+local radiusValue = 40
+local fovValue = 70
+
+local radiusLabel = Instance.new("TextLabel")
+radiusLabel.Size = UDim2.new(0, 80, 0, 16)
+radiusLabel.Position = UDim2.new(0, 8, 0, 8)
+radiusLabel.BackgroundTransparency = 1
+radiusLabel.Text = "Radius: 40"
+radiusLabel.Font = Enum.Font.GothamBold
+radiusLabel.TextSize = 12
+radiusLabel.TextColor3 = Color3.fromRGB(200,210,255)
+radiusLabel.Parent = sliderPanel
+
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Size = UDim2.new(0, 70, 0, 16)
+fovLabel.Position = UDim2.new(0.52, 0, 0, 8)
+fovLabel.BackgroundTransparency = 1
+fovLabel.Text = "FOV: 70"
+fovLabel.Font = Enum.Font.GothamBold
+fovLabel.TextSize = 12
+fovLabel.TextColor3 = Color3.fromRGB(200,210,255)
+fovLabel.Parent = sliderPanel
+
+local radiusSlider = Instance.new("TextButton")
+radiusSlider.Size = UDim2.new(0.42, -8, 0, 12)
+radiusSlider.Position = UDim2.new(0, 8, 0, 30)
+radiusSlider.Text = ""
+radiusSlider.BackgroundColor3 = Color3.fromRGB(110,120,140)
+radiusSlider.BorderSizePixel = 0
+radiusSlider.Parent = sliderPanel
+
+local radiusSliderCorner = Instance.new("UICorner")
+radiusSliderCorner.CornerRadius = UDim.new(0, 6)
+radiusSliderCorner.Parent = radiusSlider
+
+local fovSlider = Instance.new("TextButton")
+fovSlider.Size = UDim2.new(0.42, -8, 0, 12)
+fovSlider.Position = UDim2.new(0.52, 0, 0, 30)
+fovSlider.Text = ""
+fovSlider.BackgroundColor3 = Color3.fromRGB(110,120,140)
+fovSlider.BorderSizePixel = 0
+fovSlider.Parent = sliderPanel
+
+local fovSliderCorner = Instance.new("UICorner")
+fovSliderCorner.CornerRadius = UDim.new(0, 6)
+fovSliderCorner.Parent = fovSlider
+
+local radiusFill = Instance.new("Frame")
+radiusFill.Size = UDim2.new(0.5, 0, 1, 0)
+radiusFill.BackgroundColor3 = Color3.fromRGB(90, 140, 255)
+radiusFill.BorderSizePixel = 0
+radiusFill.Parent = radiusSlider
+
+local radiusFillCorner = Instance.new("UICorner")
+radiusFillCorner.CornerRadius = UDim.new(0, 6)
+radiusFillCorner.Parent = radiusFill
+
+local fovFill = Instance.new("Frame")
+fovFill.Size = UDim2.new(0.5, 0, 1, 0)
+fovFill.BackgroundColor3 = Color3.fromRGB(90, 140, 255)
+fovFill.BorderSizePixel = 0
+fovFill.Parent = fovSlider
+
+local fovFillCorner = Instance.new("UICorner")
+fovFillCorner.CornerRadius = UDim.new(0, 6)
+fovFillCorner.Parent = fovFill
+
+local function updateRadiusVisual()
+    radiusFill.Size = UDim2.new(radiusValue / 100, 0, 1, 0)
+    radiusLabel.Text = "Radius: " .. tostring(radiusValue)
 end
 
---// Environment
-
-getgenv().ExunysDeveloperAimbot = {
-	DeveloperSettings = {
-		UpdateMode = "RenderStepped",
-		TeamCheckOption = "TeamColor",
-		RainbowSpeed = 1, -- Bigger = Slower
-		DisableWarnings = false
-	},
-
-	Settings = {
-		Enabled = true,
-
-		TeamCheck = false,
-		AliveCheck = true,
-		WallCheck = false,
-
-		OffsetToMoveDirection = false,
-		OffsetIncrement = 15,
-
-		Sensitivity = 0, -- Animation length (in seconds) before fully locking onto target
-		Sensitivity2 = 1, -- mousemoverel Sensitivity
-
-		LockMode = 1, -- 1 = CFrame; 2 = mousemoverel; 3 = mousemoveabs
-		LockPart = "Head", -- Body part to lock on
-
-		TriggerKey = Enum.UserInputType.MouseButton2,
-		Toggle = false
-	},
-
-	Triggerbot = {
-		Enabled = false,
-
-		TeamCheck = false,
-		AliveCheck = true,
-		AimLockedCheck = false,
-
-		Delay = 0 -- Time it takes for the trigger bot to react / click (seconds).
-	},
-
-	ClosestPlayerTracer = {
-		Enabled = true,
-		Position = 3, -- 1 = Bottom; 2 = Center; 3 = Mouse
-
-		Transparency = 0.5,
-		Thickness = 1,
-
-		RainbowColor = false,
-		Color = Color3fromRGB(150, 150, 255)
-	},
-
-	FOVSettings = {
-		Enabled = true,
-		Visible = true,
-
-		Radius = 180,
-		NumSides = 60,
-
-		Thickness = 1,
-		Transparency = 1,
-		Filled = false,
-
-		RainbowColor = false,
-		RainbowOutlineColor = false,
-		Color = Color3fromRGB(255, 255, 255),
-		OutlineColor = Color3fromRGB(0, 0, 0),
-		LockedColor = Color3fromRGB(255, 150, 150)
-	},
-
-	Blacklisted = {},
-	FOVCircleOutline = Drawingnew("Circle"),
-	FOVCircle = Drawingnew("Circle"),
-	Tracer = Drawingnew("Line")
-}
-
-local Environment, _warn = getgenv().ExunysDeveloperAimbot, clonefunction(warn); warn = function(...)
-	return not Environment.DeveloperSettings.DisableWarnings and _warn(...)
+local function updateFovVisual()
+    fovFill.Size = UDim2.new(fovValue / 100, 0, 1, 0)
+    fovLabel.Text = "FOV: " .. tostring(fovValue)
 end
 
-repeat
-	taskwait(0)
-until Environment and Environment.FOVCircle and Environment.FOVCircleOutline
-
-setrenderproperty(Environment.FOVCircle, "Visible", false)
-setrenderproperty(Environment.FOVCircleOutline, "Visible", false)
-
---// Core Functions
-
-local FixUsername = LPH_NO_VIRTUALIZE(function(String)
-	for _, Value in next, GetPlayers(Players) do
-		local Name = __index(Value, "Name")
-
-		if stringsub(stringlower(Name), 1, #String) == stringlower(String) then
-			return Name
-		end
-	end
+radiusSlider.MouseButton1Click:Connect(function()
+    radiusValue = math.clamp(radiusValue + 10, 10, 100)
+    updateRadiusVisual()
 end)
 
-local GetRainbowColor = LPH_NO_VIRTUALIZE(function()
-	local RainbowSpeed = Environment.DeveloperSettings.RainbowSpeed
-
-	return Color3fromHSV(tick() % RainbowSpeed / RainbowSpeed, 1, 1)
+fovSlider.MouseButton1Click:Connect(function()
+    fovValue = math.clamp(fovValue + 10, 20, 100)
+    updateFovVisual()
 end)
 
-local ConvertVector = LPH_NO_VIRTUALIZE(function(Vector)
-	return Vector2new(Vector.X, Vector.Y)
-end)
-
-local CancelLock = LPH_NO_VIRTUALIZE(function()
-	Environment.Locked = nil
-
-	setrenderproperty(Environment.FOVCircle, "Color", Environment.FOVSettings.Color)
-	__newindex(UserInputService, "MouseDeltaSensitivity", OriginalSensitivity)
-
-	if Animation then
-		Animation:Cancel()
-	end
-
-	setrenderproperty(Environment.Tracer, "Visible", Environment.ClosestPlayerTracer.Enabled)
-end)
-
-local GetClosestPlayer = LPH_NO_VIRTUALIZE(function(Aux)
-	local Settings = Environment.Settings
-	local LockPart = Settings.LockPart
-
-	if not Environment.Locked or Aux then
-		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
-		Required3DDistance = 10000
-
-		for _, Value in next, GetPlayers(Players) do
-			local Character = __index(Value, "Character")
-			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
-
-			if Value ~= LocalPlayer and not tablefind(Environment.Blacklisted, __index(Value, "Name")) and Character and FindFirstChild(Character, LockPart) and Humanoid then
-				local PartPosition, TeamCheckOption = __index(Character[LockPart], "Position"), Environment.DeveloperSettings.TeamCheckOption
-
-				if Settings.TeamCheck and __index(Value, TeamCheckOption) == __index(LocalPlayer, TeamCheckOption) then
-					continue
-				end
-
-				if Settings.AliveCheck and __index(Humanoid, "Health") <= 0 then
-					continue
-				end
-
-				if Settings.WallCheck then
-					local BlacklistTable = GetDescendants(__index(LocalPlayer, "Character"))
-
-					for _, _Value in next, GetDescendants(Character) do
-						BlacklistTable[#BlacklistTable + 1] = _Value
-					end
-
-					if #GetPartsObscuringTarget(Camera, {PartPosition}, BlacklistTable) > 0 then
-						continue
-					end
-				end
-
-				local Vector, OnScreen, Distance = WorldToViewportPoint(Camera, PartPosition)
-				Vector = ConvertVector(Vector)
-				Distance = (GetMouseLocation(UserInputService) - Vector).Magnitude
-
-				local _3DDistance = (__index(Camera, "CFrame").Position - PartPosition).Magnitude
-
-				if Distance < RequiredDistance and _3DDistance < Required3DDistance and OnScreen then
-					RequiredDistance, Required3DDistance = Distance, _3DDistance
-
-					if not Aux then
-						Environment.Locked = Value
-					elseif not Running and not Environment.Locked then
-						return Value
-					end
-				end
-			end
-		end
-	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character"), LockPart), "Position")))).Magnitude > RequiredDistance then
-		CancelLock()
-	end
-end)
-
-local Load = function()
-	OriginalSensitivity = __index(UserInputService, "MouseDeltaSensitivity")
-
-	local Settings, Triggerbot, Tracer, FOVCircle, FOVCircleOutline, TracerSettings, FOVSettings, Offset = Environment.Settings, Environment.Triggerbot, Environment.Tracer, Environment.FOVCircle, Environment.FOVCircleOutline, Environment.ClosestPlayerTracer, Environment.FOVSettings
-	local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
-
-	local DeveloperSettings = Environment.DeveloperSettings
-	local UpdateMode = DeveloperSettings.UpdateMode
-	local TeamCheckOption = DeveloperSettings.TeamCheckOption
-
-	if mouse1press and mouse1release then
-		ServiceConnections.Triggerbot = Connect(__index(RunService, UpdateMode), LPH_NO_VIRTUALIZE(function()
-			if Triggerbot.Enabled and Mouse.Target then
-				local Character = Mouse.Target.Parent
-				local Humanoid = FindFirstChildOfClass(Character, "Humanoid")
-				local Player = GetPlayerFromCharacter(Players, Character)
-
-				if Character and Humanoid and Player then
-					if Triggerbot.TeamCheck and __index(Player, TeamCheckOption) == __index(LocalPlayer, TeamCheckOption) then
-						return
-					end
-
-					if Triggerbot.AliveCheck and __index(Humanoid, "Health") <= 0 then
-						return
-					end
-
-					if Triggerbot.AimLockedCheck and not Environment.Locked then
-						return
-					end
-
-					if Triggerbot.Delay ~= 0 then
-						taskwait(Triggerbot.Delay)
-					end
-
-					mouse1press(); taskwait(0); mouse1release()
-				end
-			end
-		end))
-	end
-
-	ServiceConnections.UpdateTracer = Connect(__index(RunService, UpdateMode), LPH_NO_VIRTUALIZE(function()
-		local ClosestPlayer = TracerSettings.Enabled and Settings.Enabled and GetClosestPlayer(true)
-
-		if ClosestPlayer then
-			setrenderproperty(Tracer, "Visible", true)
-
-			for Index, Value in next, TracerSettings do
-				if Index == "Color" then
-					continue
-				end
-
-				if pcall(getrenderproperty, Tracer, Index) then
-					setrenderproperty(Tracer, Index, Value)
-				end
-			end
-
-			setrenderproperty(Tracer, "Color", TracerSettings.RainbowColor and GetRainbowColor() or TracerSettings.Color)
-
-			if TracerSettings.Position == 1 then
-				setrenderproperty(Tracer, "From", Vector2new(CameraViewportSize.X / 2, CameraViewportSize.Y))
-			elseif TracerSettings.Position == 2 then
-				setrenderproperty(Tracer, "From", CameraViewportSize / 2)
-			elseif TracerSettings.Position == 3 then
-				setrenderproperty(Tracer, "From", GetMouseLocation(UserInputService))
-			else
-				TracerSettings.Position = 3
-			end
-
-			setrenderproperty(Tracer, "To", ConvertVector(WorldToViewportPoint(Camera, __index(__index(ClosestPlayer, "Character")[Settings.LockPart], "Position"))))
-		else
-			setrenderproperty(Tracer, "Visible", false)
-		end
-	end))
-
-	ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, UpdateMode), LPH_NO_VIRTUALIZE(function()
-		if FOVSettings.Enabled and Settings.Enabled then
-			for Index, Value in next, FOVSettings do
-				if Index == "Color" then
-					continue
-				end
-
-				if pcall(getrenderproperty, FOVCircle, Index) then
-					setrenderproperty(FOVCircle, Index, Value)
-					setrenderproperty(FOVCircleOutline, Index, Value)
-				end
-			end
-
-			setrenderproperty(FOVCircle, "Color", (Environment.Locked and FOVSettings.LockedColor) or FOVSettings.RainbowColor and GetRainbowColor() or FOVSettings.Color)
-			setrenderproperty(FOVCircleOutline, "Color", FOVSettings.RainbowOutlineColor and GetRainbowColor() or FOVSettings.OutlineColor)
-
-			setrenderproperty(FOVCircleOutline, "Thickness", FOVSettings.Thickness + 1)
-			setrenderproperty(FOVCircle, "Position", GetMouseLocation(UserInputService))
-			setrenderproperty(FOVCircleOutline, "Position", GetMouseLocation(UserInputService))
-		else
-			setrenderproperty(FOVCircle, "Visible", false)
-			setrenderproperty(FOVCircleOutline, "Visible", false)
-		end
-
-		if Running and Settings.Enabled then
-			GetClosestPlayer()
-
-			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
-
-			if Environment.Locked then
-				local LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
-				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
-
-				if Settings.LockMode == 2 then
-					mousemoverel((LockedPosition.X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2, (LockedPosition.Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2)
-				elseif Settings.LockMode == 3 and mousemoveabs then
-					mousemoveabs(LockedPosition.X, LockedPosition.Y)
-				else
-					if Settings.Sensitivity > 0 then
-						Animation = TweenService:Create(Camera, TweenInfonew(Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset)})
-						Animation:Play()
-					else
-						__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
-					end
-
-					__newindex(UserInputService, "MouseDeltaSensitivity", 0)
-				end
-
-				setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
-				setrenderproperty(Tracer, "Visible", false)
-			end
-		end
-	end))
-
-	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), LPH_NO_VIRTUALIZE(function(Input)
-		if Typing then
-			return
-		end
-
-		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
-
-		-- Right Alt = ON/OFF seluruh fungsi aimbot tanpa reload / Load()
-		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == Enum.KeyCode.RightAlt then
-			Settings.Enabled = not Settings.Enabled
-
-			if not Settings.Enabled then
-				Running = false
-				CancelLock()
-
-				setrenderproperty(FOVCircle, "Visible", false)
-				setrenderproperty(FOVCircleOutline, "Visible", false)
-				setrenderproperty(Tracer, "Visible", false)
-			end
-
-			return
-		end
-
-		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
-			if not Settings.Enabled then
-				return
-			end
-
-			if Toggle then
-				Running = not Running
-
-				if not Running then
-					CancelLock()
-				end
-			else
-				Running = true
-			end
-		end
-	end))
-
-	ServiceConnections.InputEndedConnection = Connect(__index(UserInputService, "InputEnded"), LPH_NO_VIRTUALIZE(function(Input)
-		if Typing then
-			return
-		end
-
-		local TriggerKey = Settings.TriggerKey
-
-		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
-			Running = false; CancelLock()
-		end
-	end))
-end
-
---// Typing Check
-
-ServiceConnections.TypingStartedConnection = Connect(__index(UserInputService, "TextBoxFocused"), function()
-	Typing = true
-end)
-
-ServiceConnections.TypingEndedConnection = Connect(__index(UserInputService, "TextBoxFocusReleased"), function()
-	Typing = false
-end)
-
---// Interactive User Methods
-
-repeat
-	taskwait(0)
-until Environment and Load
-
-Environment.Exit = LPH_NO_VIRTUALIZE(function(self) -- ExunysDeveloperAimbot.Exit(self)
-	assert(self, "EXUNYS_AIMBOT-V3.Exit: Missing parameter #1 \"self\" <table>.")
-
-	for Index, _ in next, ServiceConnections do
-		pcall(Disconnect, ServiceConnections[Index])
-	end
-
-	Load = nil; ConvertVector = nil; CancelLock = nil; GetClosestPlayer = nil; GetRainbowColor = nil; FixUsername = nil
-
-	self.FOVCircle:Remove()
-	self.FOVCircleOutline:Remove()
-	self.Tracer:Remove()
-
-	getgenv().ExunysDeveloperAimbot = nil; pcall(collectgarbage, "step", 200)
-end)
-
-Environment.Restart = LPH_NO_VIRTUALIZE(function() -- ExunysDeveloperAimbot.Restart(<void>)
-	for Index, _ in next, ServiceConnections do
-		pcall(Disconnect, ServiceConnections[Index])
-	end
-
-	Load()
-end)
-
-Environment.Blacklist = LPH_NO_VIRTUALIZE(function(self, Username) -- ExunysDeveloperAimbot.Blacklisted(self, <string> Player Name)
-	assert(self, "EXUNYS_AIMBOT-V3.Blacklist: Missing parameter #1 \"self\" <table>.")
-	assert(Username, "EXUNYS_AIMBOT-V3.Blacklist: Missing parameter #2 \"Username\" <string>.")
-
-	Username = FixUsername(Username)
-
-	assert(self, "EXUNYS_AIMBOT-V3.Blacklist: User "..Username.." couldn't be found.")
-
-	self.Blacklisted[#self.Blacklisted + 1] = Username
-end)
-
-Environment.Whitelist = LPH_NO_VIRTUALIZE(function(self, Username) -- ExunysDeveloperAimbot.Whitelist(self, <string> Player Name)
-	assert(self, "EXUNYS_AIMBOT-V3.Whitelist: Missing parameter #1 \"self\" <table>.")
-	assert(Username, "EXUNYS_AIMBOT-V3.Whitelist: Missing parameter #2 \"Username\" <string>.")
-
-	Username = FixUsername(Username)
-
-	assert(Username, "EXUNYS_AIMBOT-V3.Whitelist: User "..Username.." couldn't be found.")
-
-	local Index = tablefind(self.Blacklisted, Username)
-
-	assert(Index, "EXUNYS_AIMBOT-V3.Whitelist: User "..Username.." is not blacklisted.")
-
-	tableremove(self.Blacklisted, Index)
-end)
-
-Environment.GetClosestPlayer = LPH_NO_VIRTUALIZE(function() -- ExunysDeveloperAimbot.GetClosestPlayer(<void>)
-	return GetClosestPlayer(true)
-end)
-
-Environment.Load = Load -- ExunysDeveloperAimbot.Load()
-
-setmetatable(Environment, {__call = Load})
-
-return Environment
-```
+updateRadiusVisual()
+updateFovVisual()
