@@ -1,4 +1,4 @@
--- SC FPS | Farhan Store - Low Texture Edition
+-- SC FPS | Farhan Store - Low Texture + Anti-Blur + Mild Full Bright
 -- Local visual optimization only. Does NOT modify Roblox FastFlags or network routing.
 
 local Players = game:GetService("Players")
@@ -100,16 +100,40 @@ toggle.Parent = frame
 Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 7)
 
 local active = false
-local saved = { parts = {}, decals = {}, effects = {}, shadows = nil }
+local saved = { parts = {}, decals = {}, effects = {}, shadows = nil, brightness = nil, ambient = nil, outdoorAmbient = nil }
+local effectAddedConnection
+local function disableVisualEffect(obj)
+    if not active and not obj:IsA("PostEffect") then return end
+    if obj:IsA("PostEffect") then
+        if saved.effects[obj] == nil then saved.effects[obj] = obj.Enabled end
+        pcall(function() obj.Enabled = false end)
+    end
+end
 local function applyLowTexture()
+    active = true
     saved.shadows = Lighting.GlobalShadows
+    saved.brightness = Lighting.Brightness
+    saved.ambient = Lighting.Ambient
+    saved.outdoorAmbient = Lighting.OutdoorAmbient
     Lighting.GlobalShadows = false
+    -- Sedikit lebih terang tanpa membuat layar terlalu putih.
+    Lighting.Brightness = 2
+    Lighting.Ambient = Color3.fromRGB(145, 145, 145)
+    Lighting.OutdoorAmbient = Color3.fromRGB(160, 160, 160)
     for _, obj in ipairs(Lighting:GetDescendants()) do
         if obj:IsA("PostEffect") then
-            saved.effects[obj] = obj.Enabled
+            if saved.effects[obj] == nil then saved.effects[obj] = obj.Enabled end
             obj.Enabled = false
         end
     end
+    -- Matikan blur/bloom/color-correction/depth-of-field/sun-rays yang ditambahkan saat FPS Mode aktif.
+    if effectAddedConnection then effectAddedConnection:Disconnect() end
+    effectAddedConnection = Lighting.DescendantAdded:Connect(function(obj)
+        if active and obj:IsA("PostEffect") then
+            if saved.effects[obj] == nil then saved.effects[obj] = obj.Enabled end
+            pcall(function() obj.Enabled = false end)
+        end
+    end)
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
             saved.parts[obj] = {Material = obj.Material, Reflectance = obj.Reflectance}
@@ -120,10 +144,14 @@ local function applyLowTexture()
             obj.Transparency = 1
         end
     end
-    active = true
 end
 local function restore()
+    active = false
+    if effectAddedConnection then effectAddedConnection:Disconnect(); effectAddedConnection = nil end
     if saved.shadows ~= nil then Lighting.GlobalShadows = saved.shadows end
+    if saved.brightness ~= nil then Lighting.Brightness = saved.brightness end
+    if saved.ambient ~= nil then Lighting.Ambient = saved.ambient end
+    if saved.outdoorAmbient ~= nil then Lighting.OutdoorAmbient = saved.outdoorAmbient end
     for obj, values in pairs(saved.parts) do
         if obj and obj.Parent then pcall(function() obj.Material = values.Material; obj.Reflectance = values.Reflectance end) end
     end
@@ -133,7 +161,7 @@ local function restore()
     for obj, value in pairs(saved.effects) do
         if obj and obj.Parent then pcall(function() obj.Enabled = value end) end
     end
-    saved = {parts = {}, decals = {}, effects = {}, shadows = nil}
+    saved = {parts = {}, decals = {}, effects = {}, shadows = nil, brightness = nil, ambient = nil, outdoorAmbient = nil}
     active = false
 end
 local function updateUI()
