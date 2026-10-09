@@ -21,8 +21,8 @@ if not gui.Parent then gui.Parent = playerGui end
 
 local frame = Instance.new("Frame")
 frame.Name = "Main"
-frame.Size = UDim2.fromOffset(260, 139)
-frame.Position = UDim2.new(0.5, -130, 0.42, 0)
+frame.Size = UDim2.fromOffset(270, 194)
+frame.Position = UDim2.new(0.5, -135, 0.30, 0)
 frame.BackgroundColor3 = Color3.fromRGB(17, 20, 23)
 frame.BorderSizePixel = 0
 frame.Parent = gui
@@ -120,7 +120,7 @@ pingLabel.Parent = pingCard
 
 local toggle = Instance.new("TextButton")
 toggle.Position = UDim2.fromOffset(12, 96)
-toggle.Size = UDim2.new(1, -24, 0, 30)
+toggle.Size = UDim2.new(1, -24, 0, 29)
 toggle.BackgroundColor3 = Color3.fromRGB(42, 49, 45)
 toggle.BorderSizePixel = 0
 toggle.Font = Enum.Font.GothamBold
@@ -130,78 +130,167 @@ toggle.TextColor3 = Color3.fromRGB(240, 244, 241)
 toggle.Parent = frame
 Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 7)
 
-local active = false
-local saved = { parts = {}, decals = {}, effects = {}, shadows = nil, brightness = nil, ambient = nil, outdoorAmbient = nil }
+local function makeOptionButton(name, y, text)
+    local b = Instance.new("TextButton")
+    b.Name = name
+    b.Position = UDim2.fromOffset(12, y)
+    b.Size = UDim2.new(1, -24, 0, 27)
+    b.BackgroundColor3 = Color3.fromRGB(42, 49, 45)
+    b.BorderSizePixel = 0
+    b.Font = Enum.Font.GothamBold
+    b.Text = text .. ": OFF"
+    b.TextSize = 10
+    b.TextColor3 = Color3.fromRGB(235, 242, 237)
+    b.Parent = frame
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    return b
+end
+
+local brightButton = makeOptionButton("FullBrightToggle", 132, "FULL BRIGHT")
+local shakeButton = makeOptionButton("NoShakeToggle", 163, "NO SHAKE")
+
+local active = false -- master FPS status label
+local lowTextureOn = false
+local fullBrightOn = false
+local noShakeOn = false
+local blackSkyOn = false
+local saved = {
+    parts = {}, decals = {}, effects = {},
+    shadows = nil, brightness = nil, ambient = nil, outdoorAmbient = nil,
+    sky = {}, cameraOffset = nil,
+}
 local effectAddedConnection
 local worldAddedConnection
+local cameraConnection
+
 local function applyObjectOptimization(obj)
-    if not active or not obj then return end
+    if not lowTextureOn or not obj then return end
     if obj:IsA("BasePart") then
-        if saved.parts[obj] == nil then
-            saved.parts[obj] = {Material = obj.Material, Reflectance = obj.Reflectance}
-        end
-        pcall(function()
-            obj.Material = Enum.Material.SmoothPlastic
-            obj.Reflectance = 0
-        end)
+        if saved.parts[obj] == nil then saved.parts[obj] = {Material = obj.Material, Reflectance = obj.Reflectance} end
+        pcall(function() obj.Material = Enum.Material.SmoothPlastic; obj.Reflectance = 0 end)
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
         if saved.decals[obj] == nil then saved.decals[obj] = obj.Transparency end
         pcall(function() obj.Transparency = 1 end)
     end
 end
+
+local function setLowTexture(enabled)
+    lowTextureOn = enabled
+    if enabled then
+        for _, obj in ipairs(workspace:GetDescendants()) do applyObjectOptimization(obj) end
+        if worldAddedConnection then worldAddedConnection:Disconnect() end
+        worldAddedConnection = workspace.DescendantAdded:Connect(function(obj)
+            if lowTextureOn then applyObjectOptimization(obj) end
+        end)
+    else
+        if worldAddedConnection then worldAddedConnection:Disconnect(); worldAddedConnection = nil end
+        for obj, values in pairs(saved.parts) do
+            if obj and obj.Parent then pcall(function() obj.Material = values.Material; obj.Reflectance = values.Reflectance end) end
+        end
+        for obj, value in pairs(saved.decals) do
+            if obj and obj.Parent then pcall(function() obj.Transparency = value end) end
+        end
+        saved.parts, saved.decals = {}, {}
+    end
+end
+
+local function setFullBright(enabled)
+    fullBrightOn = enabled
+    if enabled then
+        if saved.shadows == nil then saved.shadows = Lighting.GlobalShadows end
+        if saved.brightness == nil then saved.brightness = Lighting.Brightness end
+        if saved.ambient == nil then saved.ambient = Lighting.Ambient end
+        if saved.outdoorAmbient == nil then saved.outdoorAmbient = Lighting.OutdoorAmbient end
+        Lighting.GlobalShadows = false
+        Lighting.Brightness = 2
+        Lighting.Ambient = Color3.fromRGB(145, 145, 145)
+        Lighting.OutdoorAmbient = Color3.fromRGB(160, 160, 160)
+    else
+        if saved.shadows ~= nil then Lighting.GlobalShadows = saved.shadows; saved.shadows = nil end
+        if saved.brightness ~= nil then Lighting.Brightness = saved.brightness; saved.brightness = nil end
+        if saved.ambient ~= nil then Lighting.Ambient = saved.ambient; saved.ambient = nil end
+        if saved.outdoorAmbient ~= nil then Lighting.OutdoorAmbient = saved.outdoorAmbient; saved.outdoorAmbient = nil end
+    end
+    brightButton.Text = "FULL BRIGHT: " .. (enabled and "ON" or "OFF")
+    brightButton.BackgroundColor3 = enabled and Color3.fromRGB(25, 135, 72) or Color3.fromRGB(42, 49, 45)
+end
+
+local function setNoShake(enabled)
+    noShakeOn = enabled
+    local camera = workspace.CurrentCamera
+    if enabled then
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid and saved.cameraOffset == nil then saved.cameraOffset = humanoid.CameraOffset end
+        -- Best-effort only: resets Humanoid.CameraOffset, not game-controlled weapon recoil/CFrame shake.
+        if cameraConnection then cameraConnection:Disconnect() end
+        cameraConnection = game:GetService("RunService").RenderStepped:Connect(function()
+            if not noShakeOn then return end
+            local char = player.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum and hum.CameraOffset.Magnitude > 0 then hum.CameraOffset = Vector3.zero end
+        end)
+    else
+        if cameraConnection then cameraConnection:Disconnect(); cameraConnection = nil end
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid and saved.cameraOffset then pcall(function() humanoid.CameraOffset = saved.cameraOffset end) end
+        saved.cameraOffset = nil
+    end
+    shakeButton.Text = "NO SHAKE: " .. (enabled and "ON" or "OFF")
+    shakeButton.BackgroundColor3 = enabled and Color3.fromRGB(25, 135, 72) or Color3.fromRGB(42, 49, 45)
+end
+
+local function setBlackSky(enabled)
+    blackSkyOn = enabled
+    -- Darkens the sky locally using a ColorCorrectionEffect; it does not replace the game's Skybox assets.
+    local effect = Lighting:FindFirstChild("SCFPS_BlackSky")
+    if enabled then
+        if not effect then
+            effect = Instance.new("ColorCorrectionEffect")
+            effect.Name = "SCFPS_BlackSky"
+            effect.Brightness = -0.25
+            effect.Contrast = 0.05
+            effect.Saturation = -0.2
+            effect.Parent = Lighting
+        end
+        effect.Enabled = true
+    elseif effect then
+        effect:Destroy()
+    end
+end
+
 local function applyLowTexture()
     active = true
-    saved.shadows = Lighting.GlobalShadows
-    saved.brightness = Lighting.Brightness
-    saved.ambient = Lighting.Ambient
-    saved.outdoorAmbient = Lighting.OutdoorAmbient
-    Lighting.GlobalShadows = false
-    -- Sedikit lebih terang tanpa membuat layar terlalu putih.
-    Lighting.Brightness = 2
-    Lighting.Ambient = Color3.fromRGB(145, 145, 145)
-    Lighting.OutdoorAmbient = Color3.fromRGB(160, 160, 160)
+    setLowTexture(true)
+    setBlackSky(true) -- Black-sky visual effect is included in FPS Boost; no separate button.
+    -- Anti-blur: remember each effect's previous state and restore it when disabled.
     for _, obj in ipairs(Lighting:GetDescendants()) do
-        if obj:IsA("PostEffect") then
+        if obj:IsA("PostEffect") and obj.Name ~= "SCFPS_BlackSky" then
             if saved.effects[obj] == nil then saved.effects[obj] = obj.Enabled end
-            obj.Enabled = false
+            pcall(function() obj.Enabled = false end)
         end
     end
-    -- Matikan blur/bloom/color-correction/depth-of-field/sun-rays yang ditambahkan saat FPS Mode aktif.
     if effectAddedConnection then effectAddedConnection:Disconnect() end
     effectAddedConnection = Lighting.DescendantAdded:Connect(function(obj)
-        if active and obj:IsA("PostEffect") then
+        if active and obj:IsA("PostEffect") and obj.Name ~= "SCFPS_BlackSky" then
             if saved.effects[obj] == nil then saved.effects[obj] = obj.Enabled end
             pcall(function() obj.Enabled = false end)
         end
     end)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        applyObjectOptimization(obj)
-    end
-    -- Apply the same local visual settings to newly spawned objects while FPS mode is ON.
-    if worldAddedConnection then worldAddedConnection:Disconnect() end
-    worldAddedConnection = workspace.DescendantAdded:Connect(function(obj)
-        if active then applyObjectOptimization(obj) end
-    end)
 end
+
 local function restore()
     active = false
     if effectAddedConnection then effectAddedConnection:Disconnect(); effectAddedConnection = nil end
-    if worldAddedConnection then worldAddedConnection:Disconnect(); worldAddedConnection = nil end
-    if saved.shadows ~= nil then Lighting.GlobalShadows = saved.shadows end
-    if saved.brightness ~= nil then Lighting.Brightness = saved.brightness end
-    if saved.ambient ~= nil then Lighting.Ambient = saved.ambient end
-    if saved.outdoorAmbient ~= nil then Lighting.OutdoorAmbient = saved.outdoorAmbient end
-    for obj, values in pairs(saved.parts) do
-        if obj and obj.Parent then pcall(function() obj.Material = values.Material; obj.Reflectance = values.Reflectance end) end
-    end
-    for obj, value in pairs(saved.decals) do
-        if obj and obj.Parent then pcall(function() obj.Transparency = value end) end
-    end
+    setLowTexture(false)
+    setFullBright(false)
+    setNoShake(false)
+    setBlackSky(false)
     for obj, value in pairs(saved.effects) do
         if obj and obj.Parent then pcall(function() obj.Enabled = value end) end
     end
-    saved = {parts = {}, decals = {}, effects = {}, shadows = nil, brightness = nil, ambient = nil, outdoorAmbient = nil}
-    active = false
+    saved.effects = {}
 end
 local function updateUI()
     if active then
@@ -220,6 +309,8 @@ toggle.MouseButton1Click:Connect(function()
     if active then restore() else applyLowTexture() end
     updateUI()
 end)
+brightButton.MouseButton1Click:Connect(function() setFullBright(not fullBrightOn) end)
+shakeButton.MouseButton1Click:Connect(function() setNoShake(not noShakeOn) end)
 -- Close hides the menu only; it does not disable FPS mode or remove textures.
 close.MouseButton1Click:Connect(function()
     frame.Visible = false
