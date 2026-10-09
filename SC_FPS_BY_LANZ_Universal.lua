@@ -47,7 +47,7 @@ title.BackgroundTransparency = 1
 title.Position = UDim2.fromOffset(12, 0)
 title.Size = UDim2.new(1, -48, 1, 0)
 title.Font = Enum.Font.Arcade
-title.Text = "SC FPS"
+title.Text = "Farhan Store"
 title.TextSize = 15
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.TextColor3 = Color3.fromRGB(90, 255, 145)
@@ -153,9 +153,16 @@ toggle.MouseButton1Click:Connect(function()
     if active then restore() else applyLowTexture() end
     updateUI()
 end)
+-- Close hides the menu only; it does not disable FPS mode or remove textures.
 close.MouseButton1Click:Connect(function()
-    if active then restore() end
-    gui:Destroy()
+    frame.Visible = false
+end)
+
+-- Left Alt shows/hides the menu again.
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.LeftAlt then
+        frame.Visible = not frame.Visible
+    end
 end)
 
 -- Draggable title bar
@@ -173,7 +180,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Display ping if this Roblox client exposes the statistic; this does not lower ping.
+-- Read Roblox client network ping statistic when exposed; this reports real client stats, not an estimate and does not lower ping.
 task.spawn(function()
     while gui.Parent do
         local ok, value = pcall(function()
