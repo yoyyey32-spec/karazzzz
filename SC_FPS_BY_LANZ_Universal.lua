@@ -21,8 +21,8 @@ if not gui.Parent then gui.Parent = playerGui end
 
 local frame = Instance.new("Frame")
 frame.Name = "Main"
-frame.Size = UDim2.fromOffset(248, 124)
-frame.Position = UDim2.new(0.5, -124, 0.42, 0)
+frame.Size = UDim2.fromOffset(260, 139)
+frame.Position = UDim2.new(0.5, -130, 0.42, 0)
 frame.BackgroundColor3 = Color3.fromRGB(17, 20, 23)
 frame.BorderSizePixel = 0
 frame.Parent = gui
@@ -69,7 +69,7 @@ Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
 local status = Instance.new("TextLabel")
 status.BackgroundTransparency = 1
 status.Position = UDim2.fromOffset(13, 42)
-status.Size = UDim2.new(1, -26, 0, 18)
+status.Size = UDim2.new(1, -26, 0, 17)
 status.Font = Enum.Font.GothamMedium
 status.Text = "FPS MODE  •  OFF"
 status.TextSize = 11
@@ -77,20 +77,50 @@ status.TextXAlignment = Enum.TextXAlignment.Left
 status.TextColor3 = Color3.fromRGB(190, 198, 204)
 status.Parent = frame
 
+-- Compact ping card: a clean pill with status dot and readable value.
+local pingCard = Instance.new("Frame")
+pingCard.Name = "PingCard"
+pingCard.Position = UDim2.fromOffset(12, 63)
+pingCard.Size = UDim2.new(1, -24, 0, 25)
+pingCard.BackgroundColor3 = Color3.fromRGB(27, 32, 30)
+pingCard.BorderSizePixel = 0
+pingCard.Parent = frame
+Instance.new("UICorner", pingCard).CornerRadius = UDim.new(0, 7)
+
+local pingDot = Instance.new("Frame")
+pingDot.Name = "StatusDot"
+pingDot.Size = UDim2.fromOffset(7, 7)
+pingDot.Position = UDim2.fromOffset(9, 9)
+pingDot.BackgroundColor3 = Color3.fromRGB(190, 190, 190)
+pingDot.BorderSizePixel = 0
+pingDot.Parent = pingCard
+Instance.new("UICorner", pingDot).CornerRadius = UDim.new(1, 0)
+
+local pingCaption = Instance.new("TextLabel")
+pingCaption.BackgroundTransparency = 1
+pingCaption.Position = UDim2.fromOffset(22, 0)
+pingCaption.Size = UDim2.fromOffset(43, 25)
+pingCaption.Font = Enum.Font.GothamMedium
+pingCaption.Text = "PING"
+pingCaption.TextSize = 10
+pingCaption.TextXAlignment = Enum.TextXAlignment.Left
+pingCaption.TextColor3 = Color3.fromRGB(160, 174, 166)
+pingCaption.Parent = pingCard
+
 local pingLabel = Instance.new("TextLabel")
 pingLabel.BackgroundTransparency = 1
-pingLabel.Position = UDim2.fromOffset(13, 59)
-pingLabel.Size = UDim2.new(1, -26, 0, 17)
-pingLabel.Font = Enum.Font.Gotham
-pingLabel.Text = "PING  •  membaca..."
+pingLabel.Position = UDim2.new(0, 64, 0, 0)
+pingLabel.Size = UDim2.new(1, -72, 1, 0)
+pingLabel.Font = Enum.Font.GothamBold
+pingLabel.Text = "Membaca..."
 pingLabel.TextSize = 10
-pingLabel.TextXAlignment = Enum.TextXAlignment.Left
-pingLabel.TextColor3 = Color3.fromRGB(170, 185, 178)
-pingLabel.Parent = frame
+pingLabel.TextXAlignment = Enum.TextXAlignment.Right
+pingLabel.TextColor3 = Color3.fromRGB(220, 230, 224)
+pingLabel.Parent = pingCard
 
 local toggle = Instance.new("TextButton")
-toggle.Position = UDim2.fromOffset(12, 83)
-toggle.Size = UDim2.new(1, -24, 0, 29)
+toggle.Position = UDim2.fromOffset(12, 96)
+toggle.Size = UDim2.new(1, -24, 0, 30)
 toggle.BackgroundColor3 = Color3.fromRGB(42, 49, 45)
 toggle.BorderSizePixel = 0
 toggle.Font = Enum.Font.GothamBold
@@ -217,14 +247,48 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Read Roblox client network ping statistic when exposed; this reports real client stats, not an estimate and does not lower ping.
+-- Read Roblox client ping statistic. Poll every 0.1s, but only redraw the UI when the value/status changes to reduce unnecessary UI work.
 task.spawn(function()
+    local lastDisplay, lastState = nil, nil
     while gui.Parent do
         local ok, value = pcall(function()
             return Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
         end)
-        pingLabel.Text = ok and ("PING  •  " .. tostring(value)) or "PING  •  tidak tersedia"
-        task.wait(2)
+        local textValue = (ok and value ~= nil) and tostring(value) or "Tidak tersedia"
+        local numericPing = tonumber(textValue:match("[%d%.]+"))
+        local state
+        if textValue == "Tidak tersedia" then
+            state = "unavailable"
+        elseif numericPing and numericPing < 100 then
+            state = "good"
+        elseif numericPing and numericPing < 180 then
+            state = "medium"
+        else
+            state = "high"
+        end
+
+        -- Avoid repeatedly writing the same text/color every 0.1s.
+        if textValue ~= lastDisplay then
+            pingLabel.Text = textValue
+            lastDisplay = textValue
+        end
+        if state ~= lastState then
+            if state == "good" then
+                pingDot.BackgroundColor3 = Color3.fromRGB(80, 235, 135)
+                pingLabel.TextColor3 = Color3.fromRGB(110, 255, 160)
+            elseif state == "medium" then
+                pingDot.BackgroundColor3 = Color3.fromRGB(255, 195, 75)
+                pingLabel.TextColor3 = Color3.fromRGB(255, 210, 115)
+            elseif state == "high" then
+                pingDot.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+                pingLabel.TextColor3 = Color3.fromRGB(255, 135, 135)
+            else
+                pingDot.BackgroundColor3 = Color3.fromRGB(150, 155, 155)
+                pingLabel.TextColor3 = Color3.fromRGB(180, 185, 185)
+            end
+            lastState = state
+        end
+        task.wait(0.1)
     end
 end)
 updateUI()
