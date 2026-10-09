@@ -1,5 +1,6 @@
 -- SC FPS | Farhan Store - Low Texture + Anti-Blur + Mild Full Bright
 -- Local visual optimization only. Does NOT modify Roblox FastFlags or network routing.
+-- Note: local visual effects can be reduced; game-controlled weapon recoil/camera shake cannot be reliably removed by this script.
 
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
@@ -102,11 +103,20 @@ Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 7)
 local active = false
 local saved = { parts = {}, decals = {}, effects = {}, shadows = nil, brightness = nil, ambient = nil, outdoorAmbient = nil }
 local effectAddedConnection
-local function disableVisualEffect(obj)
-    if not active and not obj:IsA("PostEffect") then return end
-    if obj:IsA("PostEffect") then
-        if saved.effects[obj] == nil then saved.effects[obj] = obj.Enabled end
-        pcall(function() obj.Enabled = false end)
+local worldAddedConnection
+local function applyObjectOptimization(obj)
+    if not active or not obj then return end
+    if obj:IsA("BasePart") then
+        if saved.parts[obj] == nil then
+            saved.parts[obj] = {Material = obj.Material, Reflectance = obj.Reflectance}
+        end
+        pcall(function()
+            obj.Material = Enum.Material.SmoothPlastic
+            obj.Reflectance = 0
+        end)
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        if saved.decals[obj] == nil then saved.decals[obj] = obj.Transparency end
+        pcall(function() obj.Transparency = 1 end)
     end
 end
 local function applyLowTexture()
@@ -135,19 +145,18 @@ local function applyLowTexture()
         end
     end)
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            saved.parts[obj] = {Material = obj.Material, Reflectance = obj.Reflectance}
-            obj.Material = Enum.Material.SmoothPlastic
-            obj.Reflectance = 0
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            saved.decals[obj] = obj.Transparency
-            obj.Transparency = 1
-        end
+        applyObjectOptimization(obj)
     end
+    -- Apply the same local visual settings to newly spawned objects while FPS mode is ON.
+    if worldAddedConnection then worldAddedConnection:Disconnect() end
+    worldAddedConnection = workspace.DescendantAdded:Connect(function(obj)
+        if active then applyObjectOptimization(obj) end
+    end)
 end
 local function restore()
     active = false
     if effectAddedConnection then effectAddedConnection:Disconnect(); effectAddedConnection = nil end
+    if worldAddedConnection then worldAddedConnection:Disconnect(); worldAddedConnection = nil end
     if saved.shadows ~= nil then Lighting.GlobalShadows = saved.shadows end
     if saved.brightness ~= nil then Lighting.Brightness = saved.brightness end
     if saved.ambient ~= nil then Lighting.Ambient = saved.ambient end
