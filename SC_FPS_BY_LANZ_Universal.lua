@@ -1,9 +1,9 @@
 
 -- SC FPS | FARHAN STORE
--- Code: 201303
--- FPS Boost + Low Texture + Auto Anti-Blur
--- Mild Full Bright + CameraOffset No Shake + Ping
--- Right Alt = Show/Hide GUI | X = Hide GUI only
+-- PROJECT CODE: 201303
+-- Low Texture + Anti-Blur + Anti-Reflection
+-- Mild Full Bright + CameraOffset Shake Reduction + Ping
+-- Right Alt = Show/Hide GUI | X = Hide GUI
 
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
@@ -26,6 +26,12 @@ gui.ResetOnSpawn = false
 gui.DisplayOrder = 999
 gui.Parent = playerGui
 
+local function round(obj, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 7)
+    c.Parent = obj
+end
+
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromOffset(280, 230)
 frame.Position = UDim2.new(0, 25, 0.35, 0)
@@ -33,13 +39,6 @@ frame.BackgroundColor3 = Color3.fromRGB(23, 24, 31)
 frame.BorderSizePixel = 0
 frame.Active = true
 frame.Parent = gui
-
-local function round(obj, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 7)
-    c.Parent = obj
-end
-
 round(frame, 10)
 
 local stroke = Instance.new("UIStroke")
@@ -81,10 +80,10 @@ local ping = Instance.new("TextLabel")
 ping.Size = UDim2.new(1, -20, 0, 24)
 ping.Position = UDim2.fromOffset(10, 42)
 ping.BackgroundColor3 = Color3.fromRGB(31, 33, 43)
-ping.Text = "PING: ..."
+ping.Text = "ROBLOX PING: ..."
 ping.TextColor3 = Color3.new(1, 1, 1)
 ping.Font = Enum.Font.Code
-ping.TextSize = 13
+ping.TextSize = 12
 ping.BorderSizePixel = 0
 ping.Parent = frame
 round(ping, 6)
@@ -126,9 +125,8 @@ local brightEnabled = false
 local shakeEnabled = false
 
 local savedParts = {}
-local savedTextures = {}
 local savedEffects = {}
-local savedLighting
+local savedLighting = nil
 
 local textureConnection
 local lightingConnection
@@ -137,35 +135,51 @@ local cameraChangedConnection
 local shakeConnection
 local blackSky
 
-local function updateButton(button, label, enabled)
-    button.Text = label .. (enabled and ": ON" or ": OFF")
+local function updateButton(button, name, enabled)
+    button.Text = name .. (enabled and ": ON" or ": OFF")
     button.BackgroundColor3 = enabled and ON or OFF
 end
 
--- LOW TEXTURE
-local function optimizeObject(obj)
-    if obj:IsA("BasePart") then
-        if not savedParts[obj] then
-            savedParts[obj] = {
-                Material = obj.Material,
-                Reflectance = obj.Reflectance
-            }
+-- Skip character parts and fence objects to preserve their appearance.
+local function isCharacterOrFence(obj)
+    local current = obj
+    while current and current ~= Workspace do
+        local name = string.lower(current.Name)
+
+        if current:IsA("Model")
+            and Players:GetPlayerFromCharacter(current) then
+            return true
         end
 
-        pcall(function()
-            obj.Material = Enum.Material.SmoothPlastic
-            obj.Reflectance = 0
-        end)
-
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        if savedTextures[obj] == nil then
-            savedTextures[obj] = obj.Transparency
+        if string.find(name, "fence", 1, true)
+            or string.find(name, "pagar", 1, true)
+            or string.find(name, "railing", 1, true)
+            or string.find(name, "gate", 1, true) then
+            return true
         end
 
-        pcall(function()
-            obj.Transparency = 1
-        end)
+        current = current.Parent
     end
+
+    return false
+end
+
+-- LOW TEXTURE + REDUCE REFLECTION
+local function optimizeObject(obj)
+    if not obj:IsA("BasePart") then return end
+    if isCharacterOrFence(obj) then return end
+
+    if not savedParts[obj] then
+        savedParts[obj] = {
+            Material = obj.Material,
+            Reflectance = obj.Reflectance
+        }
+    end
+
+    pcall(function()
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
+    end)
 end
 
 local function setLowTexture(enabled)
@@ -202,43 +216,29 @@ local function setLowTexture(enabled)
             end
         end
 
-        for obj, old in pairs(savedTextures) do
-            if obj.Parent then
-                pcall(function()
-                    obj.Transparency = old
-                end)
-            end
-        end
-
         table.clear(savedParts)
-        table.clear(savedTextures)
     end
 end
 
--- ANTI-BLUR: disables BlurEffect in Lighting and the current camera.
-local function disableBlur(obj)
-    if obj:IsA("BlurEffect") then
-        if savedEffects[obj] == nil then
-            savedEffects[obj] = obj.Enabled
-        end
-        pcall(function()
-            obj.Enabled = false
-        end)
-    elseif obj:IsA("PostEffect") and obj ~= blackSky then
-        -- Disable other post effects while FPS Boost is active.
-        if savedEffects[obj] == nil then
-            savedEffects[obj] = obj.Enabled
-        end
-        pcall(function()
-            obj.Enabled = false
-        end)
+-- ANTI-BLUR + POST EFFECTS
+local function disableEffect(obj)
+    if not obj:IsA("PostEffect") then return end
+    if obj == blackSky then return end
+
+    if savedEffects[obj] == nil then
+        savedEffects[obj] = obj.Enabled
     end
+
+    pcall(function()
+        obj.Enabled = false
+    end)
 end
 
 local function scanEffects(container)
     if not container then return end
+
     for _, obj in ipairs(container:GetDescendants()) do
-        disableBlur(obj)
+        disableEffect(obj)
     end
 end
 
@@ -249,14 +249,15 @@ local function watchCamera()
     end
 
     local camera = Workspace.CurrentCamera
-    if not camera or not fpsEnabled then return end
+    if not fpsEnabled or not camera then return end
 
     scanEffects(camera)
+
     cameraConnection = camera.DescendantAdded:Connect(function(obj)
         if fpsEnabled then
             task.defer(function()
                 if fpsEnabled and obj.Parent then
-                    disableBlur(obj)
+                    disableEffect(obj)
                 end
             end)
         end
@@ -287,7 +288,7 @@ local function setFPS(enabled)
             if fpsEnabled then
                 task.defer(function()
                     if fpsEnabled and obj.Parent then
-                        disableBlur(obj)
+                        disableEffect(obj)
                     end
                 end)
             end
@@ -297,14 +298,12 @@ local function setFPS(enabled)
             cameraChangedConnection:Disconnect()
         end
 
-        cameraChangedConnection = Workspace:GetPropertyChangedSignal(
-            "CurrentCamera"
-        ):Connect(function()
-            if fpsEnabled then
-                watchCamera()
-            end
-        end)
-
+        cameraChangedConnection =
+            Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+                if fpsEnabled then
+                    watchCamera()
+                end
+            end)
     else
         if lightingConnection then
             lightingConnection:Disconnect()
@@ -328,10 +327,10 @@ local function setFPS(enabled)
             blackSky = nil
         end
 
-        for obj, wasEnabled in pairs(savedEffects) do
+        for obj, old in pairs(savedEffects) do
             if obj.Parent then
                 pcall(function()
-                    obj.Enabled = wasEnabled
+                    obj.Enabled = old
                 end)
             end
         end
@@ -342,7 +341,7 @@ local function setFPS(enabled)
     updateButton(fpsBtn, "FPS BOOST", fpsEnabled)
 end
 
--- FULL BRIGHT: sedikit lebih terang, tidak terlalu putih.
+-- MILD FULL BRIGHT
 local function setFullBright(enabled)
     brightEnabled = enabled
 
@@ -380,8 +379,8 @@ local function setFullBright(enabled)
     updateButton(brightBtn, "FULL BRIGHT", brightEnabled)
 end
 
--- NO SHAKE: resets Humanoid.CameraOffset only.
--- Does not promise to remove the game's own weapon recoil.
+-- SHAKE REDUCTION: Humanoid.CameraOffset only.
+-- This does not guarantee removal of weapon recoil.
 local function setNoShake(enabled)
     shakeEnabled = enabled
 
@@ -417,7 +416,7 @@ shakeBtn.MouseButton1Click:Connect(function()
     setNoShake(not shakeEnabled)
 end)
 
--- X hides GUI; features remain active.
+-- X hides the GUI only.
 close.MouseButton1Click:Connect(function()
     frame.Visible = false
 end)
@@ -458,36 +457,39 @@ UIS.InputChanged:Connect(function(input)
     if dragging and input == dragInput then
         local delta = input.Position - dragStart
         frame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
         )
     end
 end)
 
--- PING LABEL: reads Roblox's reported Data Ping value.
+-- PING
+-- Reads Roblox's reported Data Ping value without inventing a number.
+-- Roblox's value can differ from a game's custom ping display.
 task.spawn(function()
     while gui.Parent do
         local valueText
 
         pcall(function()
-            valueText = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
+            valueText =
+                Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
         end)
 
         if valueText then
-            ping.Text = "PING: " .. valueText
-            local value = tonumber(valueText:match("[%d%.]+"))
+            ping.Text = "ROBLOX PING: " .. valueText
 
-            if value and value < 100 then
+            local number = tonumber(valueText:match("[%d%.]+"))
+
+            if number and number < 100 then
                 ping.TextColor3 = Color3.fromRGB(100, 230, 145)
-            elseif value and value < 180 then
+            elseif number and number < 180 then
                 ping.TextColor3 = Color3.fromRGB(245, 205, 95)
             else
                 ping.TextColor3 = Color3.fromRGB(255, 105, 105)
             end
         else
-            ping.Text = "PING: N/A"
+            ping.Text = "ROBLOX PING: N/A"
+            ping.TextColor3 = Color3.fromRGB(210, 215, 230)
         end
 
         task.wait(0.1)
