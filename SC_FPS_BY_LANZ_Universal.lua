@@ -1,497 +1,389 @@
-
--- SC FPS | FARHAN STORE
--- PROJECT CODE: 201303
--- Low Texture + Anti-Blur + Anti-Reflection
--- Mild Full Bright + CameraOffset Shake Reduction + Ping
--- Right Alt = Show/Hide GUI | X = Hide GUI
+-- ============================================================
+-- SC FPS | Farhan Store - Complete
+-- FPS Boost | Low Texture | Black Sky | Anti-Blur
+-- Mild Full Bright | No Recoil/Shake | Ping | Right Alt GUI
+-- ============================================================
 
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local UIS = game:GetService("UserInputService")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
-local Workspace = game:GetService("Workspace")
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-pcall(function()
-    local old = playerGui:FindFirstChild("SCFPS_FarhanStore")
-    if old then old:Destroy() end
-end)
+-- Prevent duplicate GUIs when re-executed
+local previous = PlayerGui:FindFirstChild("SCFPS_FarhanStore")
+if previous then previous:Destroy() end
 
+local state = {
+    fpsBoost = false,
+    antiBlur = false,
+    fullBright = false,
+    noShake = false,
+    guiVisible = true,
+}
+
+local originalLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    FogEnd = Lighting.FogEnd,
+}
+
+local originalObjects = setmetatable({}, { __mode = "k" })
+local processing = false
+
+-- ============================================================
+-- NO SHAKE / NO RECOIL (user-provided function)
+-- ============================================================
+local function applyNoRecoil(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    local s = tool:FindFirstChild("Setting")
+    if not s or not s:IsA("ModuleScript") then return end
+    pcall(function()
+        local m = require(s)
+        if type(m) ~= "table" then return end
+        if m.Recoil ~= nil then m.Recoil = 0 end
+        if m.RecoilAmount ~= nil then m.RecoilAmount = 0 end
+        if m.CameraRecoil ~= nil then m.CameraRecoil = 0 end
+        if m.CameraShake ~= nil then m.CameraShake = 0 end
+        if m.Kick ~= nil then m.Kick = 0 end
+        if m.Kickback ~= nil then m.Kickback = 0 end
+        if m.VerticalRecoil ~= nil then m.VerticalRecoil = 0 end
+        if m.HorizontalRecoil ~= nil then m.HorizontalRecoil = 0 end
+        if m.RecoilX ~= nil then m.RecoilX = 0 end
+        if m.RecoilY ~= nil then m.RecoilY = 0 end
+        if m.GunRecoil ~= nil then m.GunRecoil = 0 end
+        if m.WeaponRecoil ~= nil then m.WeaponRecoil = 0 end
+        if m.AimRecoil ~= nil then m.AimRecoil = 0 end
+        if m.ShakeAmount ~= nil then m.ShakeAmount = 0 end
+        if m.ShakeIntensity ~= nil then m.ShakeIntensity = 0 end
+    end)
+end
+
+local function scanTools(container)
+    if not container then return end
+    for _, item in ipairs(container:GetChildren()) do
+        if item:IsA("Tool") then applyNoRecoil(item) end
+    end
+end
+
+local function applyNoRecoilToCharacter()
+    scanTools(LocalPlayer:FindFirstChildOfClass("Backpack"))
+    scanTools(LocalPlayer.Character)
+end
+
+-- ============================================================
+-- VISUAL OPTIMIZATION
+-- ============================================================
+local function saveOriginal(instance)
+    if originalObjects[instance] then return end
+    local data = {}
+    pcall(function()
+        if instance:IsA("BasePart") then
+            data.Material = instance.Material
+            data.Reflectance = instance.Reflectance
+        elseif instance:IsA("Decal") or instance:IsA("Texture") then
+            data.Transparency = instance.Transparency
+        elseif instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") then
+            data.Enabled = instance.Enabled
+        elseif instance:IsA("PostEffect") then
+            data.Enabled = instance.Enabled
+        end
+    end)
+    originalObjects[instance] = data
+end
+
+local function optimizeInstance(instance)
+    if not state.fpsBoost then return end
+    saveOriginal(instance)
+    pcall(function()
+        if instance:IsA("BasePart") then
+            instance.Material = Enum.Material.SmoothPlastic
+            instance.Reflectance = 0
+        elseif instance:IsA("Decal") or instance:IsA("Texture") then
+            instance.Transparency = 1
+        elseif instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") then
+            instance.Enabled = false
+        elseif instance:IsA("PostEffect") and instance:IsA("BlurEffect") then
+            instance.Enabled = false
+        end
+    end)
+end
+
+local function applyFPSBoost()
+    if state.fpsBoost then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            optimizeInstance(obj)
+        end
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1000000
+        -- Black sky: hide celestial bodies without deleting the Sky instance.
+        for _, sky in ipairs(Lighting:GetChildren()) do
+            if sky:IsA("Sky") then
+                pcall(function()
+                    sky.CelestialBodiesShown = false
+                    sky.StarCount = 0
+                    sky.SunAngularSize = 0
+                    sky.MoonAngularSize = 0
+                end)
+            end
+        end
+    else
+        for instance, data in pairs(originalObjects) do
+            if instance and instance.Parent then
+                pcall(function()
+                    for property, value in pairs(data) do
+                        instance[property] = value
+                    end
+                end)
+            end
+        end
+        Lighting.GlobalShadows = originalLighting.GlobalShadows
+        Lighting.FogEnd = originalLighting.FogEnd
+    end
+end
+
+local function applyAntiBlur()
+    if not state.antiBlur then return end
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("BlurEffect") then
+            pcall(function() obj.Enabled = false end)
+        end
+    end
+    local camera = workspace.CurrentCamera
+    if camera then
+        for _, obj in ipairs(camera:GetChildren()) do
+            if obj:IsA("BlurEffect") then
+                pcall(function() obj.Enabled = false end)
+            end
+        end
+    end
+end
+
+local function applyFullBright()
+    if state.fullBright then
+        Lighting.Brightness = 2.2
+        Lighting.ClockTime = 14
+        Lighting.Ambient = Color3.fromRGB(145, 145, 145)
+        Lighting.OutdoorAmbient = Color3.fromRGB(165, 165, 165)
+    else
+        Lighting.Brightness = originalLighting.Brightness
+        Lighting.ClockTime = originalLighting.ClockTime
+        Lighting.Ambient = originalLighting.Ambient
+        Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+    end
+end
+
+local function applyBlackSky()
+    -- Hides sky visuals without deleting the game's Sky object.
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Sky") then
+            pcall(function()
+                obj.CelestialBodiesShown = false
+                obj.StarCount = 0
+                obj.SunAngularSize = 0
+                obj.MoonAngularSize = 0
+            end)
+        end
+    end
+end
+
+-- ============================================================
+-- GUI
+-- ============================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "SCFPS_FarhanStore"
 gui.ResetOnSpawn = false
-gui.DisplayOrder = 999
-gui.Parent = playerGui
+gui.IgnoreGuiInset = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = PlayerGui
 
-local function round(obj, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 7)
-    c.Parent = obj
-end
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(280, 230)
-frame.Position = UDim2.new(0, 25, 0.35, 0)
-frame.BackgroundColor3 = Color3.fromRGB(23, 24, 31)
-frame.BorderSizePixel = 0
-frame.Active = true
-frame.Parent = gui
-round(frame, 10)
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.fromOffset(300, 330)
+main.Position = UDim2.new(0, 24, 0.32, 0)
+main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+main.BorderSizePixel = 0
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
 
 local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(85, 88, 112)
-stroke.Parent = frame
+stroke.Color = Color3.fromRGB(220, 55, 65)
+stroke.Thickness = 1.5
+stroke.Parent = main
 
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 35)
-titleBar.BackgroundColor3 = Color3.fromRGB(34, 36, 47)
-titleBar.BorderSizePixel = 0
-titleBar.Active = true
-titleBar.Parent = frame
-round(titleBar, 8)
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 42)
+header.BackgroundColor3 = Color3.fromRGB(145, 25, 35)
+header.BorderSizePixel = 0
+header.Parent = main
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -45, 1, 0)
-title.Position = UDim2.fromOffset(10, 0)
+title.Size = UDim2.new(1, -72, 1, 0)
+title.Position = UDim2.fromOffset(12, 0)
 title.BackgroundTransparency = 1
-title.Text = "Farhan Store"
+title.Text = "SC FPS | FARHAN STORE"
 title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.Arcade
-title.TextSize = 17
+title.TextSize = 14
+title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = titleBar
+title.Parent = header
 
 local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(30, 27)
-close.Position = UDim2.new(1, -35, 0, 4)
-close.BackgroundColor3 = Color3.fromRGB(170, 55, 65)
+close.Name = "HideButton"
+close.Size = UDim2.fromOffset(32, 28)
+close.Position = UDim2.new(1, -38, 0, 7)
+close.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 close.Text = "X"
 close.TextColor3 = Color3.new(1, 1, 1)
-close.Font = Enum.Font.Arcade
 close.TextSize = 14
-close.BorderSizePixel = 0
-close.Parent = titleBar
-round(close, 6)
-
-local ping = Instance.new("TextLabel")
-ping.Size = UDim2.new(1, -20, 0, 24)
-ping.Position = UDim2.fromOffset(10, 42)
-ping.BackgroundColor3 = Color3.fromRGB(31, 33, 43)
-ping.Text = "ROBLOX PING: ..."
-ping.TextColor3 = Color3.new(1, 1, 1)
-ping.Font = Enum.Font.Code
-ping.TextSize = 12
-ping.BorderSizePixel = 0
-ping.Parent = frame
-round(ping, 6)
-
-local function makeButton(text, y)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -20, 0, 30)
-    b.Position = UDim2.fromOffset(10, y)
-    b.BackgroundColor3 = Color3.fromRGB(49, 52, 67)
-    b.Text = text
-    b.TextColor3 = Color3.new(1, 1, 1)
-    b.Font = Enum.Font.Arcade
-    b.TextSize = 11
-    b.BorderSizePixel = 0
-    b.Parent = frame
-    round(b, 6)
-    return b
-end
-
-local fpsBtn = makeButton("FPS BOOST: OFF", 73)
-local brightBtn = makeButton("FULL BRIGHT: OFF", 108)
-local shakeBtn = makeButton("NO SHAKE: OFF", 143)
-
-local hint = Instance.new("TextLabel")
-hint.Size = UDim2.new(1, -20, 0, 25)
-hint.Position = UDim2.fromOffset(10, 181)
-hint.BackgroundTransparency = 1
-hint.Text = "Right Alt: Show / Hide"
-hint.TextColor3 = Color3.fromRGB(165, 170, 185)
-hint.Font = Enum.Font.Code
-hint.TextSize = 11
-hint.Parent = frame
-
-local ON = Color3.fromRGB(42, 125, 86)
-local OFF = Color3.fromRGB(49, 52, 67)
-
-local fpsEnabled = false
-local brightEnabled = false
-local shakeEnabled = false
-
-local savedParts = {}
-local savedEffects = {}
-local savedLighting = nil
-
-local textureConnection
-local lightingConnection
-local cameraConnection
-local cameraChangedConnection
-local shakeConnection
-local blackSky
-
-local function updateButton(button, name, enabled)
-    button.Text = name .. (enabled and ": ON" or ": OFF")
-    button.BackgroundColor3 = enabled and ON or OFF
-end
-
--- Skip character parts and fence objects to preserve their appearance.
-local function isCharacterOrFence(obj)
-    local current = obj
-    while current and current ~= Workspace do
-        local name = string.lower(current.Name)
-
-        if current:IsA("Model")
-            and Players:GetPlayerFromCharacter(current) then
-            return true
-        end
-
-        if string.find(name, "fence", 1, true)
-            or string.find(name, "pagar", 1, true)
-            or string.find(name, "railing", 1, true)
-            or string.find(name, "gate", 1, true) then
-            return true
-        end
-
-        current = current.Parent
-    end
-
-    return false
-end
-
--- LOW TEXTURE + REDUCE REFLECTION
-local function optimizeObject(obj)
-    if not obj:IsA("BasePart") then return end
-    if isCharacterOrFence(obj) then return end
-
-    if not savedParts[obj] then
-        savedParts[obj] = {
-            Material = obj.Material,
-            Reflectance = obj.Reflectance
-        }
-    end
-
-    pcall(function()
-        obj.Material = Enum.Material.SmoothPlastic
-        obj.Reflectance = 0
-    end)
-end
-
-local function setLowTexture(enabled)
-    if enabled then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            optimizeObject(obj)
-        end
-
-        if textureConnection then
-            textureConnection:Disconnect()
-        end
-
-        textureConnection = Workspace.DescendantAdded:Connect(function(obj)
-            if fpsEnabled then
-                task.defer(function()
-                    if fpsEnabled and obj.Parent then
-                        optimizeObject(obj)
-                    end
-                end)
-            end
-        end)
-    else
-        if textureConnection then
-            textureConnection:Disconnect()
-            textureConnection = nil
-        end
-
-        for obj, old in pairs(savedParts) do
-            if obj.Parent then
-                pcall(function()
-                    obj.Material = old.Material
-                    obj.Reflectance = old.Reflectance
-                end)
-            end
-        end
-
-        table.clear(savedParts)
-    end
-end
-
--- ANTI-BLUR + POST EFFECTS
-local function disableEffect(obj)
-    if not obj:IsA("PostEffect") then return end
-    if obj == blackSky then return end
-
-    if savedEffects[obj] == nil then
-        savedEffects[obj] = obj.Enabled
-    end
-
-    pcall(function()
-        obj.Enabled = false
-    end)
-end
-
-local function scanEffects(container)
-    if not container then return end
-
-    for _, obj in ipairs(container:GetDescendants()) do
-        disableEffect(obj)
-    end
-end
-
-local function watchCamera()
-    if cameraConnection then
-        cameraConnection:Disconnect()
-        cameraConnection = nil
-    end
-
-    local camera = Workspace.CurrentCamera
-    if not fpsEnabled or not camera then return end
-
-    scanEffects(camera)
-
-    cameraConnection = camera.DescendantAdded:Connect(function(obj)
-        if fpsEnabled then
-            task.defer(function()
-                if fpsEnabled and obj.Parent then
-                    disableEffect(obj)
-                end
-            end)
-        end
-    end)
-end
-
-local function setFPS(enabled)
-    fpsEnabled = enabled
-
-    if enabled then
-        setLowTexture(true)
-
-        blackSky = Instance.new("ColorCorrectionEffect")
-        blackSky.Name = "SCFPS_BlackSky"
-        blackSky.Brightness = -0.12
-        blackSky.Contrast = 0.02
-        blackSky.Saturation = -0.12
-        blackSky.Parent = Lighting
-
-        scanEffects(Lighting)
-        watchCamera()
-
-        if lightingConnection then
-            lightingConnection:Disconnect()
-        end
-
-        lightingConnection = Lighting.DescendantAdded:Connect(function(obj)
-            if fpsEnabled then
-                task.defer(function()
-                    if fpsEnabled and obj.Parent then
-                        disableEffect(obj)
-                    end
-                end)
-            end
-        end)
-
-        if cameraChangedConnection then
-            cameraChangedConnection:Disconnect()
-        end
-
-        cameraChangedConnection =
-            Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-                if fpsEnabled then
-                    watchCamera()
-                end
-            end)
-    else
-        if lightingConnection then
-            lightingConnection:Disconnect()
-            lightingConnection = nil
-        end
-
-        if cameraConnection then
-            cameraConnection:Disconnect()
-            cameraConnection = nil
-        end
-
-        if cameraChangedConnection then
-            cameraChangedConnection:Disconnect()
-            cameraChangedConnection = nil
-        end
-
-        setLowTexture(false)
-
-        if blackSky then
-            blackSky:Destroy()
-            blackSky = nil
-        end
-
-        for obj, old in pairs(savedEffects) do
-            if obj.Parent then
-                pcall(function()
-                    obj.Enabled = old
-                end)
-            end
-        end
-
-        table.clear(savedEffects)
-    end
-
-    updateButton(fpsBtn, "FPS BOOST", fpsEnabled)
-end
-
--- MILD FULL BRIGHT
-local function setFullBright(enabled)
-    brightEnabled = enabled
-
-    if enabled then
-        if not savedLighting then
-            savedLighting = {
-                Brightness = Lighting.Brightness,
-                GlobalShadows = Lighting.GlobalShadows,
-                Ambient = Lighting.Ambient,
-                OutdoorAmbient = Lighting.OutdoorAmbient,
-                Exposure = Lighting.ExposureCompensation
-            }
-        end
-
-        pcall(function()
-            Lighting.Brightness = math.max(Lighting.Brightness, 2.2)
-            Lighting.GlobalShadows = false
-            Lighting.Ambient = Color3.fromRGB(115, 115, 125)
-            Lighting.OutdoorAmbient = Color3.fromRGB(135, 135, 145)
-            Lighting.ExposureCompensation = 0.15
-        end)
-    else
-        if savedLighting then
-            pcall(function()
-                Lighting.Brightness = savedLighting.Brightness
-                Lighting.GlobalShadows = savedLighting.GlobalShadows
-                Lighting.Ambient = savedLighting.Ambient
-                Lighting.OutdoorAmbient = savedLighting.OutdoorAmbient
-                Lighting.ExposureCompensation = savedLighting.Exposure
-            end)
-            savedLighting = nil
-        end
-    end
-
-    updateButton(brightBtn, "FULL BRIGHT", brightEnabled)
-end
-
--- SHAKE REDUCTION: Humanoid.CameraOffset only.
--- This does not guarantee removal of weapon recoil.
-local function setNoShake(enabled)
-    shakeEnabled = enabled
-
-    if shakeConnection then
-        shakeConnection:Disconnect()
-        shakeConnection = nil
-    end
-
-    if enabled then
-        shakeConnection = RunService.RenderStepped:Connect(function()
-            local character = player.Character
-            local humanoid = character
-                and character:FindFirstChildOfClass("Humanoid")
-
-            if humanoid and humanoid.CameraOffset.Magnitude > 0.001 then
-                humanoid.CameraOffset = Vector3.zero
-            end
-        end)
-    end
-
-    updateButton(shakeBtn, "NO SHAKE", shakeEnabled)
-end
-
-fpsBtn.MouseButton1Click:Connect(function()
-    setFPS(not fpsEnabled)
-end)
-
-brightBtn.MouseButton1Click:Connect(function()
-    setFullBright(not brightEnabled)
-end)
-
-shakeBtn.MouseButton1Click:Connect(function()
-    setNoShake(not shakeEnabled)
-end)
-
--- X hides the GUI only.
+close.Font = Enum.Font.GothamBold
+close.Parent = header
+Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
 close.MouseButton1Click:Connect(function()
-    frame.Visible = false
+    state.guiVisible = false
+    main.Visible = false -- X only hides the GUI; features remain enabled
 end)
 
-UIS.InputBegan:Connect(function(input)
+local pingLabel = Instance.new("TextLabel")
+pingLabel.Name = "PingLabel"
+pingLabel.Size = UDim2.new(1, -24, 0, 24)
+pingLabel.Position = UDim2.fromOffset(12, 48)
+pingLabel.BackgroundColor3 = Color3.fromRGB(31, 31, 38)
+pingLabel.Text = "Ping: ..."
+pingLabel.TextColor3 = Color3.fromRGB(100, 220, 130)
+pingLabel.TextSize = 12
+pingLabel.Font = Enum.Font.GothamMedium
+pingLabel.Parent = main
+Instance.new("UICorner", pingLabel).CornerRadius = UDim.new(0, 5)
+
+local buttons = {}
+local function createToggle(key, label, y, callback)
+    local button = Instance.new("TextButton")
+    button.Name = key .. "Toggle"
+    button.Size = UDim2.new(1, -24, 0, 34)
+    button.Position = UDim2.fromOffset(12, y)
+    button.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.TextSize = 12
+    button.Font = Enum.Font.GothamSemibold
+    button.Parent = main
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
+    buttons[key] = { button = button, label = label }
+    button.MouseButton1Click:Connect(function()
+        state[key] = not state[key]
+        callback()
+        updateButton(key)
+    end)
+end
+
+function updateButton(key)
+    local item = buttons[key]
+    if not item then return end
+    local enabled = state[key]
+    item.button.Text = item.label .. (enabled and "  [ON]" or "  [OFF]")
+    item.button.BackgroundColor3 = enabled and Color3.fromRGB(125, 30, 40) or Color3.fromRGB(48, 48, 56)
+end
+
+createToggle("fpsBoost", "FPS Boost / Low Texture", 80, applyFPSBoost)
+createToggle("antiBlur", "Anti-Blur", 120, applyAntiBlur)
+createToggle("fullBright", "Full Bright (mild)", 160, applyFullBright)
+createToggle("noShake", "No Shake / No Recoil", 200, applyNoRecoilToCharacter)
+
+local note = Instance.new("TextLabel")
+note.Size = UDim2.new(1, -24, 0, 38)
+note.Position = UDim2.fromOffset(12, 244)
+note.BackgroundTransparency = 1
+note.Text = "Right Alt: tampil/sembunyi GUI\nX: sembunyikan GUI saja"
+note.TextColor3 = Color3.fromRGB(190, 190, 200)
+note.TextSize = 11
+note.Font = Enum.Font.Gotham
+note.TextWrapped = true
+note.Parent = main
+
+for key in pairs(buttons) do updateButton(key) end
+
+-- Make the panel draggable by its header.
+do
+    local dragging = false
+    local dragInput, dragStart, startPosition
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Right Alt toggles visibility. X only hides; Right Alt can show it again.
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.RightAlt then
-        frame.Visible = not frame.Visible
+        state.guiVisible = not state.guiVisible
+        main.Visible = state.guiVisible
     end
 end)
 
--- DRAG GUI
-local dragging = false
-local dragStart, startPos, dragInput
+-- Re-apply visual options to new objects as they appear.
+workspace.DescendantAdded:Connect(function(obj)
+    if state.fpsBoost then task.defer(function() optimizeInstance(obj) end) end
+end)
 
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
-
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+Lighting.ChildAdded:Connect(function(obj)
+    if state.antiBlur and obj:IsA("BlurEffect") then
+        task.defer(function() pcall(function() obj.Enabled = false end) end)
+    end
+    if state.fpsBoost and obj:IsA("Sky") then
+        task.defer(applyBlackSky)
     end
 end)
 
-titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UIS.InputChanged:Connect(function(input)
-    if dragging and input == dragInput then
-        local delta = input.Position - dragStart
-        frame.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
--- PING
--- Reads Roblox's reported Data Ping value without inventing a number.
--- Roblox's value can differ from a game's custom ping display.
+-- Ping display refreshes every 0.1 seconds.
 task.spawn(function()
     while gui.Parent do
-        local valueText
-
+        local pingText = "Ping: N/A"
         pcall(function()
-            valueText =
-                Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
+            local network = Stats:FindFirstChild("Network")
+            local serverStats = network and network:FindFirstChild("ServerStatsItem")
+            local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+            if dataPing then pingText = "Ping: " .. tostring(dataPing:GetValueString()) end
         end)
-
-        if valueText then
-            ping.Text = "ROBLOX PING: " .. valueText
-
-            local number = tonumber(valueText:match("[%d%.]+"))
-
-            if number and number < 100 then
-                ping.TextColor3 = Color3.fromRGB(100, 230, 145)
-            elseif number and number < 180 then
-                ping.TextColor3 = Color3.fromRGB(245, 205, 95)
-            else
-                ping.TextColor3 = Color3.fromRGB(255, 105, 105)
-            end
-        else
-            ping.Text = "ROBLOX PING: N/A"
-            ping.TextColor3 = Color3.fromRGB(210, 215, 230)
-        end
-
+        if pingLabel and pingLabel.Parent then pingLabel.Text = pingText end
         task.wait(0.1)
     end
 end)
+
+-- Keep No Recoil applied to tools that are equipped or added later.
+task.spawn(function()
+    while gui.Parent do
+        if state.noShake then applyNoRecoilToCharacter() end
+        task.wait(0.5)
+    end
+end)
+
+print("[SC FPS | Farhan Store] Loaded successfully.")
+print("Right Alt = show/hide GUI | X = hide GUI only")
