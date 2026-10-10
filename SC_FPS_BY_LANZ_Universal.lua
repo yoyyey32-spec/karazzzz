@@ -3,27 +3,31 @@
 
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local UIS = game:GetService("UserInputService")
+local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local old = playerGui:FindFirstChild("SCFPS")
-if old then
-    old:Destroy()
+local oldGui = playerGui:FindFirstChild("SCFPS_FarhanStore")
+if oldGui then
+    oldGui:Destroy()
 end
 
 local state = {
-    fps = false,
-    blur = false,
-    bright = false,
-    shake = false,
-    visible = true
+    fpsBoost = false,
+    blackSky = false,
+    antiBlur = false,
+    fullBright = false,
+    noShake = false,
+    guiVisible = true
 }
 
-local oldLighting = {
+local savedParts = setmetatable({}, {__mode = "k"})
+local savedEffects = setmetatable({}, {__mode = "k"})
+local savedSky = setmetatable({}, {__mode = "k"})
+local savedLighting = {
     Brightness = Lighting.Brightness,
     GlobalShadows = Lighting.GlobalShadows,
     Ambient = Lighting.Ambient,
@@ -31,10 +35,6 @@ local oldLighting = {
     FogEnd = Lighting.FogEnd,
     ExposureCompensation = Lighting.ExposureCompensation
 }
-
-local savedParts = setmetatable({}, {__mode = "k"})
-local savedEffects = setmetatable({}, {__mode = "k"})
-local savedSky = setmetatable({}, {__mode = "k"})
 
 local function savePart(obj)
     if savedParts[obj] then return end
@@ -53,74 +53,45 @@ local function savePart(obj)
     savedParts[obj] = data
 end
 
-local function lowTexture(obj)
-    if not state.fps then return end
+local function saveEffect(obj)
+    if savedEffects[obj] == nil then
+        pcall(function()
+            savedEffects[obj] = obj.Enabled
+        end)
+    end
+end
 
-    savePart(obj)
+local function optimizeObject(obj)
+    if not state.fpsBoost then return end
 
     pcall(function()
         if obj:IsA("BasePart") then
+            savePart(obj)
             obj.Material = Enum.Material.SmoothPlastic
             obj.Reflectance = 0
+
         elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            savePart(obj)
             obj.Transparency = 1
+
         elseif obj:IsA("ParticleEmitter")
             or obj:IsA("Trail")
-            or obj:IsA("Beam")
-            or obj:IsA("BlurEffect") then
+            or obj:IsA("Beam") then
 
-            if savedEffects[obj] == nil then
-                savedEffects[obj] = obj.Enabled
-            end
-
+            saveEffect(obj)
             obj.Enabled = false
         end
     end)
 end
 
-local function blackSky()
-    for _, obj in ipairs(Lighting:GetChildren()) do
-        if obj:IsA("Sky") then
-            if not savedSky[obj] then
-                savedSky[obj] = {
-                    CelestialBodiesShown = obj.CelestialBodiesShown,
-                    StarCount = obj.StarCount,
-                    SunAngularSize = obj.SunAngularSize,
-                    MoonAngularSize = obj.MoonAngularSize
-                }
-            end
-
-            pcall(function()
-                obj.CelestialBodiesShown = false
-                obj.StarCount = 0
-                obj.SunAngularSize = 0
-                obj.MoonAngularSize = 0
-            end)
-        end
-    end
-end
-
-local function restoreSky()
-    for obj, data in pairs(savedSky) do
-        if obj and obj.Parent then
-            pcall(function()
-                for property, value in pairs(data) do
-                    obj[property] = value
-                end
-            end)
-        end
-    end
-end
-
-local function setFPS()
-    if state.fps then
+local function applyFPSBoost()
+    if state.fpsBoost then
         for _, obj in ipairs(Workspace:GetDescendants()) do
-            lowTexture(obj)
+            optimizeObject(obj)
         end
 
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 1000000
-        blackSky()
     else
         for obj, data in pairs(savedParts) do
             if obj and obj.Parent then
@@ -140,14 +111,31 @@ local function setFPS()
             end
         end
 
-        Lighting.GlobalShadows = oldLighting.GlobalShadows
-        Lighting.FogEnd = oldLighting.FogEnd
-        restoreSky()
+        Lighting.GlobalShadows = savedLighting.GlobalShadows
+        Lighting.FogEnd = savedLighting.FogEnd
     end
 end
 
-local function setBlur()
-    if not (state.blur or state.shake) then
+local function applyBlackSky()
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Sky") then
+            if not savedSky[obj] then
+                savedSky[obj] = {
+                    CelestialBodiesShown = obj.CelestialBodiesShown,
+                    StarCount = obj.StarCount
+                }
+            end
+
+            pcall(function()
+                obj.CelestialBodiesShown = not state.blackSky
+                obj.StarCount = state.blackSky and 0 or savedSky[obj].StarCount
+            end)
+        end
+    end
+end
+
+local function applyAntiBlur()
+    if not (state.antiBlur or state.noShake) then
         for obj, enabled in pairs(savedEffects) do
             if obj and obj.Parent and obj:IsA("BlurEffect") then
                 pcall(function()
@@ -158,224 +146,248 @@ local function setBlur()
         return
     end
 
-    local function scan(container)
-        if not container then return end
-
-        for _, obj in ipairs(container:GetDescendants()) do
-            if obj:IsA("BlurEffect") then
-                if savedEffects[obj] == nil then
-                    savedEffects[obj] = obj.Enabled
+    for _, container in ipairs({Lighting, Workspace.CurrentCamera}) do
+        if container then
+            for _, obj in ipairs(container:GetDescendants()) do
+                if obj:IsA("BlurEffect") then
+                    saveEffect(obj)
+                    obj.Enabled = false
                 end
-
-                obj.Enabled = false
             end
         end
     end
-
-    scan(Lighting)
-    scan(Workspace.CurrentCamera)
 end
 
-local function setBright()
-    if state.bright then
+local function applyFullBright()
+    if state.fullBright then
         Lighting.Brightness = 2.2
         Lighting.Ambient = Color3.fromRGB(145, 145, 145)
         Lighting.OutdoorAmbient = Color3.fromRGB(165, 165, 165)
         Lighting.ExposureCompensation = 0.15
     else
-        Lighting.Brightness = oldLighting.Brightness
-        Lighting.Ambient = oldLighting.Ambient
-        Lighting.OutdoorAmbient = oldLighting.OutdoorAmbient
-        Lighting.ExposureCompensation =
-            oldLighting.ExposureCompensation
+        Lighting.Brightness = savedLighting.Brightness
+        Lighting.Ambient = savedLighting.Ambient
+        Lighting.OutdoorAmbient = savedLighting.OutdoorAmbient
+        Lighting.ExposureCompensation = savedLighting.ExposureCompensation
     end
 end
 
+-- GUI
+
 local gui = Instance.new("ScreenGui")
-gui.Name = "SCFPS"
+gui.Name = "SCFPS_FarhanStore"
 gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(285, 375)
-main.Position = UDim2.new(0, 25, 0.3, 0)
-main.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+main.Name = "Main"
+main.Size = UDim2.fromOffset(300, 445)
+main.Position = UDim2.new(0, 24, 0.25, 0)
+main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 main.BorderSizePixel = 0
 main.Parent = gui
 
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
 
-local border = Instance.new("UIStroke")
-border.Color = Color3.fromRGB(180, 40, 48)
-border.Thickness = 1.2
-border.Parent = main
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(220, 55, 65)
+stroke.Thickness = 1.5
+stroke.Parent = main
 
 local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 38)
-header.BackgroundColor3 = Color3.fromRGB(135, 30, 38)
+header.Size = UDim2.new(1, 0, 0, 44)
+header.BackgroundColor3 = Color3.fromRGB(145, 25, 35)
 header.BorderSizePixel = 0
 header.Parent = main
 
-Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
-local function makeText(parent, text, size, pos, fontSize)
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.Size = size
-    label.Position = pos
-    label.Font = Enum.Font.Gotham
-    label.TextSize = fontSize or 12
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.Parent = parent
-    return label
-end
-
-local title = makeText(
-    header,
-    "SC FPS",
-    UDim2.new(1, -55, 1, 0),
-    UDim2.fromOffset(12, 0),
-    14
-)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 1, 0)
+title.Position = UDim2.fromOffset(12, 0)
+title.BackgroundTransparency = 1
+title.Text = "Farhan Store"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextSize = 17
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
 
 local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(30, 26)
-close.Position = UDim2.new(1, -35, 0, 6)
-close.BackgroundColor3 = Color3.fromRGB(40, 40, 44)
+close.Size = UDim2.fromOffset(30, 28)
+close.Position = UDim2.new(1, -37, 0, 8)
+close.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+close.BorderSizePixel = 0
 close.Text = "X"
 close.TextColor3 = Color3.new(1, 1, 1)
-close.TextSize = 12
+close.TextSize = 14
 close.Font = Enum.Font.GothamBold
 close.Parent = header
 
-Instance.new("UICorner", close).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
 
-close.MouseButton1Click:Connect(function()
-    state.visible = false
-    main.Visible = false
-end)
+local pingLabel = Instance.new("TextLabel")
+pingLabel.Size = UDim2.new(1, -24, 0, 25)
+pingLabel.Position = UDim2.fromOffset(12, 52)
+pingLabel.BackgroundColor3 = Color3.fromRGB(31, 31, 38)
+pingLabel.Text = "Ping: ..."
+pingLabel.TextColor3 = Color3.fromRGB(100, 220, 130)
+pingLabel.TextSize = 12
+pingLabel.Font = Enum.Font.GothamMedium
+pingLabel.Parent = main
 
-local ping = makeText(
-    main,
-    "Ping: ...",
-    UDim2.new(1, -20, 0, 24),
-    UDim2.fromOffset(10, 43),
-    12
-)
-ping.TextColor3 = Color3.fromRGB(100, 220, 130)
-ping.BackgroundTransparency = 0
-ping.BackgroundColor3 = Color3.fromRGB(33, 33, 38)
+Instance.new("UICorner", pingLabel).CornerRadius = UDim.new(0, 5)
 
-Instance.new("UICorner", ping).CornerRadius = UDim.new(0, 5)
+local buttons = {}
 
-local function makeButton(text, y)
+local function updateButton(key)
+    local item = buttons[key]
+    if not item then return end
+
+    local enabled = state[key]
+    item.button.Text = item.label .. (enabled and "  [ON]" or "  [OFF]")
+    item.button.BackgroundColor3 = enabled
+        and Color3.fromRGB(125, 30, 40)
+        or Color3.fromRGB(48, 48, 56)
+end
+
+local function createToggle(key, label, y, callback)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -20, 0, 31)
-    button.Position = UDim2.fromOffset(10, y)
-    button.BackgroundColor3 = Color3.fromRGB(48, 48, 54)
+    button.Name = key .. "Toggle"
+    button.Size = UDim2.new(1, -24, 0, 34)
+    button.Position = UDim2.fromOffset(12, y)
+    button.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
     button.BorderSizePixel = 0
     button.TextColor3 = Color3.new(1, 1, 1)
     button.TextSize = 12
-    button.Font = Enum.Font.Gotham
-    button.Text = text
+    button.Font = Enum.Font.GothamSemibold
     button.Parent = main
 
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 5)
-    return button
-end
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
 
-local toggleButtons = {}
-
-local function makeToggle(key, text, y, callback)
-    local button = makeButton("", y)
-    toggleButtons[key] = button
-
-    local function refresh()
-        button.Text = text .. (state[key] and "  [ON]" or "  [OFF]")
-        button.BackgroundColor3 = state[key]
-            and Color3.fromRGB(125, 35, 43)
-            or Color3.fromRGB(48, 48, 54)
-    end
+    buttons[key] = {button = button, label = label}
 
     button.MouseButton1Click:Connect(function()
         state[key] = not state[key]
 
         local ok, err = pcall(callback)
-        if not ok then warn("[SC FPS]", err) end
+        if not ok then
+            warn("[SC FPS] " .. tostring(err))
+        end
 
-        refresh()
+        updateButton(key)
     end)
-
-    refresh()
 end
 
-makeToggle("fps", "FPS Boost", 76, setFPS)
-makeToggle("blur", "Anti Blur", 113, setBlur)
-makeToggle("bright", "Full Bright", 150, setBright)
-makeToggle("shake", "No Shake", 187, setBlur)
+createToggle("fpsBoost", "FPS Boost / Low Texture", 87, applyFPSBoost)
+createToggle("blackSky", "Black Sky", 127, applyBlackSky)
+createToggle("antiBlur", "Anti-Blur", 167, applyAntiBlur)
+createToggle("fullBright", "Full Bright", 207, applyFullBright)
+createToggle("noShake", "No Shake (Safe)", 247, applyAntiBlur)
 
--- Font menu
-local fontLabel = makeText(
-    main,
-    "Font",
-    UDim2.new(1, -20, 0, 20),
-    UDim2.fromOffset(10, 228),
-    12
-)
-fontLabel.TextXAlignment = Enum.TextXAlignment.Left
-fontLabel.Font = Enum.Font.GothamBold
+local fontTitle = Instance.new("TextLabel")
+fontTitle.Size = UDim2.new(1, -24, 0, 20)
+fontTitle.Position = UDim2.fromOffset(12, 286)
+fontTitle.BackgroundTransparency = 1
+fontTitle.Text = "Font"
+fontTitle.TextColor3 = Color3.new(1, 1, 1)
+fontTitle.TextSize = 13
+fontTitle.Font = Enum.Font.GothamBold
+fontTitle.TextXAlignment = Enum.TextXAlignment.Left
+fontTitle.Parent = main
 
-local fontList = {
-    {name = "Default", font = Enum.Font.Gotham},
-    {name = "Minecraft Regular", font = Enum.Font.Code},
-    {name = "Lenmok", font = Enum.Font.SciFi}
-}
+local fontNames = {"Default", "Minecraft Regular", "Lenmok"}
+local fontValues = {Enum.Font.Gotham, Enum.Font.Code, Enum.Font.SciFi}
+local selectedFont = 1
 
-local fontIndex = 1
+local fontButton = Instance.new("TextButton")
+fontButton.Size = UDim2.new(1, -24, 0, 32)
+fontButton.Position = UDim2.fromOffset(12, 310)
+fontButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+fontButton.BorderSizePixel = 0
+fontButton.TextColor3 = Color3.new(1, 1, 1)
+fontButton.TextSize = 12
+fontButton.Font = Enum.Font.Gotham
+fontButton.Text = "Font: Default  >"
+fontButton.Parent = main
 
-local fontButton = makeButton("Default", 251)
-local applyButton = makeButton("Apply", 288)
-local resetButton = makeButton("Reset", 325)
+Instance.new("UICorner", fontButton).CornerRadius = UDim.new(0, 6)
 
-local function applyFont()
-    local font = fontList[fontIndex].font
+fontButton.MouseButton1Click:Connect(function()
+    selectedFont = selectedFont % #fontNames + 1
+    fontButton.Text = "Font: " .. fontNames[selectedFont] .. "  >"
+end)
 
+local function applyFont(font)
     for _, obj in ipairs(gui:GetDescendants()) do
-        if obj:IsA("TextLabel")
-            or obj:IsA("TextButton")
-            or obj:IsA("TextBox") then
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
             obj.Font = font
         end
     end
-
-    fontButton.Text = fontList[fontIndex].name
 end
 
-fontButton.MouseButton1Click:Connect(function()
-    fontIndex = fontIndex % #fontList + 1
-    fontButton.Text = fontList[fontIndex].name
-end)
+local applyButton = Instance.new("TextButton")
+applyButton.Size = UDim2.new(0.5, -16, 0, 30)
+applyButton.Position = UDim2.fromOffset(12, 350)
+applyButton.BackgroundColor3 = Color3.fromRGB(145, 25, 35)
+applyButton.BorderSizePixel = 0
+applyButton.Text = "Apply"
+applyButton.TextColor3 = Color3.new(1, 1, 1)
+applyButton.TextSize = 12
+applyButton.Font = Enum.Font.GothamBold
+applyButton.Parent = main
 
-applyButton.MouseButton1Click:Connect(applyFont)
+Instance.new("UICorner", applyButton).CornerRadius = UDim.new(0, 6)
+
+local resetButton = Instance.new("TextButton")
+resetButton.Size = UDim2.new(0.5, -16, 0, 30)
+resetButton.Position = UDim2.new(0.5, 4, 0, 350)
+resetButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+resetButton.BorderSizePixel = 0
+resetButton.Text = "Reset"
+resetButton.TextColor3 = Color3.new(1, 1, 1)
+resetButton.TextSize = 12
+resetButton.Font = Enum.Font.GothamBold
+resetButton.Parent = main
+
+Instance.new("UICorner", resetButton).CornerRadius = UDim.new(0, 6)
+
+applyButton.MouseButton1Click:Connect(function()
+    applyFont(fontValues[selectedFont])
+end)
 
 resetButton.MouseButton1Click:Connect(function()
-    fontIndex = 1
-    applyFont()
+    selectedFont = 1
+    applyFont(Enum.Font.Gotham)
+    fontButton.Text = "Font: Default  >"
 end)
 
--- Drag window
+local note = Instance.new("TextLabel")
+note.Size = UDim2.new(1, -24, 0, 30)
+note.Position = UDim2.fromOffset(12, 390)
+note.BackgroundTransparency = 1
+note.Text = "Right Alt: buka/tutup menu"
+note.TextColor3 = Color3.fromRGB(190, 190, 200)
+note.TextSize = 11
+note.Font = Enum.Font.Gotham
+note.Parent = main
+
+for key in pairs(buttons) do
+    updateButton(key)
+end
+
+-- Geser GUI dari bagian atas
+
 do
     local dragging = false
     local dragStart
     local startPosition
-    local dragInput
 
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
+
             dragging = true
             dragStart = input.Position
             startPosition = main.Position
@@ -388,15 +400,12 @@ do
         end
     end)
 
-    header.InputChanged:Connect(function(input)
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+
         if input.UserInputType == Enum.UserInputType.MouseMovement
             or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
 
-    UIS.InputChanged:Connect(function(input)
-        if dragging and input == dragInput then
             local delta = input.Position - dragStart
             main.Position = UDim2.new(
                 startPosition.X.Scale,
@@ -408,58 +417,58 @@ do
     end)
 end
 
-UIS.InputBegan:Connect(function(input, processed)
+close.MouseButton1Click:Connect(function()
+    state.guiVisible = false
+    main.Visible = false
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
 
     if input.KeyCode == Enum.KeyCode.RightAlt then
-        state.visible = not state.visible
-        main.Visible = state.visible
+        state.guiVisible = not state.guiVisible
+        main.Visible = state.guiVisible
     end
 end)
 
 Workspace.DescendantAdded:Connect(function(obj)
-    if state.fps then
+    if state.fpsBoost then
         task.defer(function()
-            if obj and obj.Parent then lowTexture(obj) end
+            if obj and obj.Parent then
+                optimizeObject(obj)
+            end
         end)
     end
 end)
 
 Lighting.DescendantAdded:Connect(function(obj)
-    if (state.blur or state.shake) and obj:IsA("BlurEffect") then
-        task.defer(setBlur)
-    end
-
-    if state.fps and obj:IsA("Sky") then
-        task.defer(blackSky)
+    if obj:IsA("BlurEffect") and (state.antiBlur or state.noShake) then
+        task.defer(applyAntiBlur)
     end
 end)
 
-Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-    if state.blur or state.shake then
-        task.defer(setBlur)
-    end
-end)
+-- Update ping
 
 task.spawn(function()
     while gui.Parent do
-        local text = "Ping: N/A"
+        local value = "N/A"
 
         pcall(function()
             local network = Stats:FindFirstChild("Network")
-            local serverStats = network
-                and network:FindFirstChild("ServerStatsItem")
-            local dataPing = serverStats
-                and serverStats:FindFirstChild("Data Ping")
+            local serverStats = network and network:FindFirstChild("ServerStatsItem")
+            local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
 
             if dataPing then
-                text = "Ping: " .. dataPing:GetValueString()
+                value = dataPing:GetValueString()
             end
         end)
 
-        if ping.Parent then ping.Text = text end
+        if pingLabel and pingLabel.Parent then
+            pingLabel.Text = "Ping: " .. value
+        end
+
         task.wait(0.1)
     end
 end)
 
-print("[SC FPS] Loaded")
+print("[SC FPS | Farhan Store] Loaded")
