@@ -19,8 +19,9 @@ local state = {
     minimized = false
 }
 
-local savedObjects = setmetatable({}, {__mode = "k"})
-local savedEffects = setmetatable({}, {__mode = "k"})
+local savedObjects = {}
+local savedEffects = {}
+local savedFPSLighting
 local savedLight = {
     Brightness = Lighting.Brightness,
     GlobalShadows = Lighting.GlobalShadows,
@@ -45,23 +46,29 @@ local spaceSky = {
 }
 
 local function remember(obj, properties)
-    if not obj or not obj.Parent then return end
+    if not obj then return end
     savedObjects[obj] = savedObjects[obj] or {}
 
     for _, property in ipairs(properties) do
         if savedObjects[obj][property] == nil then
-            pcall(function()
-                savedObjects[obj][property] = obj[property]
+            local ok, value = pcall(function()
+                return obj[property]
             end)
+            if ok then
+                savedObjects[obj][property] = {value = value}
+            end
         end
     end
 end
 
 local function rememberEffect(obj)
-    if savedEffects[obj] ~= nil then return end
-    pcall(function()
-        savedEffects[obj] = obj.Enabled
+    if not obj or savedEffects[obj] ~= nil then return end
+    local ok, enabled = pcall(function()
+        return obj.Enabled
     end)
+    if ok then
+        savedEffects[obj] = enabled
+    end
 end
 
 local function optimizeObject(obj)
@@ -95,32 +102,36 @@ end
 
 local function restoreWorld()
     for obj, properties in pairs(savedObjects) do
-        if obj and obj.Parent then
-            for property, value in pairs(properties) do
-                pcall(function()
-                    obj[property] = value
-                end)
-            end
-        end
-    end
-
-    for obj, enabled in pairs(savedEffects) do
-        if obj and obj.Parent then
+        for property, record in pairs(properties) do
             pcall(function()
-                obj.Enabled = enabled
+                obj[property] = record.value
             end)
         end
     end
 
-    Lighting.GlobalShadows = savedLight.GlobalShadows
-    Lighting.FogEnd = savedLight.FogEnd
+    for obj, enabled in pairs(savedEffects) do
+        pcall(function()
+            obj.Enabled = enabled
+        end)
+    end
+
+    if savedFPSLighting then
+        pcall(function()
+            Lighting.GlobalShadows = savedFPSLighting.GlobalShadows
+            Lighting.FogEnd = savedFPSLighting.FogEnd
+        end)
+    end
+
+    savedObjects = {}
+    savedEffects = {}
+    savedFPSLighting = nil
 end
 
 local function setDarkSkyObject(obj)
-    if not obj or not obj.Parent then return end
+    if not obj then return end
 
     if obj:IsA("Sky") then
-        local props = {"CelestialBodiesShown", "StarCount"}
+        local props = {"CelestialBodiesShown", "StarCount", "SunAngularSize", "MoonAngularSize", "SkyboxOrientation"}
         for _, face in ipairs(skyFaces) do
             table.insert(props, face)
         end
@@ -128,11 +139,17 @@ local function setDarkSkyObject(obj)
 
         pcall(function()
             obj.CelestialBodiesShown = false
+            obj.SunAngularSize = 0
+            obj.MoonAngularSize = 0
             obj.StarCount = 0
-            for _, face in ipairs(skyFaces) do
-                obj[face] = spaceSky[face]
-            end
+            obj.SkyboxOrientation = Vector3.zero
         end)
+
+        for _, face in ipairs(skyFaces) do
+            pcall(function()
+                obj[face] = spaceSky[face]
+            end)
+        end
 
     elseif obj:IsA("Atmosphere") then
         remember(obj, {"Color", "Decay", "Density", "Glare", "Haze"})
@@ -145,7 +162,7 @@ local function setDarkSkyObject(obj)
         end)
 
     elseif obj:IsA("Clouds") then
-        remember(obj, {"Cover", "Density", "Color"})
+        remember(obj, {"Cover", "Density"})
         pcall(function()
             obj.Cover = 0
             obj.Density = 0
@@ -154,50 +171,24 @@ local function setDarkSkyObject(obj)
 end
 
 local function applyBlackSky()
-    if state.fpsBoost then
-        for _, obj in ipairs(Lighting:GetDescendants()) do
+    if not state.fpsBoost then return end
+
+    for _, obj in ipairs(Lighting:GetDescendants()) do
+        if obj:IsA("Sky") or obj:IsA("Atmosphere") then
             setDarkSkyObject(obj)
         end
+    end
 
-        local clouds = Workspace.Terrain:FindFirstChildOfClass("Clouds")
-        if clouds then
-            setDarkSkyObject(clouds)
-        end
-    else
-        for obj, properties in pairs(savedObjects) do
-            if obj and obj.Parent and (obj:IsA("Sky") or obj:IsA("Atmosphere") or obj:IsA("Clouds")) then
-                for property, value in pairs(properties) do
-                    pcall(function()
-                        obj[property] = value
-                    end)
-                end
-            end
+    for _, obj in ipairs(Workspace.Terrain:GetDescendants()) do
+        if obj:IsA("Clouds") then
+            setDarkSkyObject(obj)
         end
     end
 end
 
-local function applyNoShake()
-    local character = player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or not state.fpsBoost then return end
-
-    remember(humanoid, {"CameraOffset"})
-    pcall(function()
-        humanoid.CameraOffset = Vector3.zero
-    end)
-end
 
 local function applyAntiBlur()
-    if not state.fpsBoost then
-        for obj, enabled in pairs(savedEffects) do
-            if obj and obj.Parent and obj:IsA("BlurEffect") then
-                pcall(function()
-                    obj.Enabled = enabled
-                end)
-            end
-        end
-        return
-    end
+    if not state.fpsBoost then return end
 
     local camera = Workspace.CurrentCamera
     local containers = {Lighting}
@@ -209,7 +200,9 @@ local function applyAntiBlur()
         for _, obj in ipairs(container:GetDescendants()) do
             if obj:IsA("BlurEffect") then
                 rememberEffect(obj)
-                obj.Enabled = false
+                pcall(function()
+                    obj.Enabled = false
+                end)
             end
         end
     end
@@ -217,18 +210,23 @@ end
 
 local function applyFPSBoost()
     if state.fpsBoost then
+        savedFPSLighting = {
+            GlobalShadows = Lighting.GlobalShadows,
+            FogEnd = Lighting.FogEnd
+        }
+
         for _, obj in ipairs(Workspace:GetDescendants()) do
             optimizeObject(obj)
         end
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 1000000
+
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 1000000
+        end)
         applyBlackSky()
         applyAntiBlur()
-        applyNoShake()
     else
         restoreWorld()
-        applyBlackSky()
-        applyAntiBlur()
     end
 end
 
@@ -247,7 +245,7 @@ local function applyFullBright()
 end
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "FarhanStore"
+gui.Name = "SCFPS_FarhanStore"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
@@ -283,31 +281,9 @@ for i = 1, 25 do
     Instance.new("UICorner", star).CornerRadius = UDim.new(1, 0)
 end
 
-local holeRing = Instance.new("Frame")
-holeRing.Size = UDim2.fromOffset(38, 38)
-holeRing.Position = UDim2.new(1, -51, 0, 12)
-holeRing.BackgroundColor3 = Color3.fromRGB(12, 14, 25)
-holeRing.BackgroundTransparency = 0.15
-holeRing.BorderSizePixel = 0
-holeRing.ZIndex = 2
-holeRing.Parent = main
-Instance.new("UICorner", holeRing).CornerRadius = UDim.new(1, 0)
-local ringStroke = Instance.new("UIStroke")
-ringStroke.Color = Color3.fromRGB(35, 125, 255)
-ringStroke.Thickness = 2
-ringStroke.Parent = holeRing
-
-local holeCore = Instance.new("Frame")
-holeCore.Size = UDim2.fromOffset(17, 17)
-holeCore.Position = UDim2.new(0.5, -8, 0.5, -8)
-holeCore.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-holeCore.BorderSizePixel = 0
-holeCore.ZIndex = 3
-holeCore.Parent = holeRing
-Instance.new("UICorner", holeCore).CornerRadius = UDim.new(1, 0)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -75, 0, 29)
+title.Size = UDim2.new(1, -58, 0, 29)
 title.Position = UDim2.fromOffset(13, 8)
 title.BackgroundTransparency = 1
 title.Text = "Farhan Store"
@@ -470,9 +446,6 @@ Workspace.DescendantAdded:Connect(function(obj)
         if not obj or not obj.Parent then return end
         if state.fpsBoost then
             optimizeObject(obj)
-            if obj:IsA("Humanoid") then
-                applyNoShake()
-            end
             if obj:IsA("Clouds") or obj:IsA("Sky") or obj:IsA("Atmosphere") then
                 setDarkSkyObject(obj)
             end
@@ -482,13 +455,6 @@ Workspace.DescendantAdded:Connect(function(obj)
             end
         end
     end)
-end)
-
-player.CharacterAdded:Connect(function(character)
-    if state.fpsBoost then
-        task.wait(0.5)
-        applyNoShake()
-    end
 end)
 
 Lighting.DescendantAdded:Connect(function(obj)
@@ -508,7 +474,6 @@ task.spawn(function()
         if state.fpsBoost then
             pcall(applyBlackSky)
             pcall(applyAntiBlur)
-            pcall(applyNoShake)
         end
         if state.fullBright then
             pcall(applyFullBright)
