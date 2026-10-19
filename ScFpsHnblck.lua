@@ -15,7 +15,6 @@ end
 
 local state = {
     fpsBoost = false,
-    ultraBurik = false,
     blackSky = false,
     antiBlur = false,
     fullBright = false,
@@ -26,6 +25,7 @@ local state = {
 local savedParts = setmetatable({}, {__mode = "k"})
 local savedEffects = setmetatable({}, {__mode = "k"})
 local savedSky = setmetatable({}, {__mode = "k"})
+local savedSurface = setmetatable({}, {__mode = "k"})
 
 local savedLighting = {
     Brightness = Lighting.Brightness,
@@ -33,7 +33,9 @@ local savedLighting = {
     Ambient = Lighting.Ambient,
     OutdoorAmbient = Lighting.OutdoorAmbient,
     FogEnd = Lighting.FogEnd,
-    ExposureCompensation = Lighting.ExposureCompensation
+    ExposureCompensation = Lighting.ExposureCompensation,
+    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+    EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale
 }
 
 local function savePart(obj)
@@ -46,13 +48,18 @@ local function savePart(obj)
             data.Material = obj.Material
             data.Reflectance = obj.Reflectance
             data.CastShadow = obj.CastShadow
+            data.MaterialVariant = obj.MaterialVariant
         end
 
         if obj:IsA("MeshPart") then
             data.TextureID = obj.TextureID
-        elseif obj:IsA("SpecialMesh") then
+        end
+
+        if obj:IsA("SpecialMesh") then
             data.TextureId = obj.TextureId
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        end
+
+        if obj:IsA("Decal") or obj:IsA("Texture") then
             data.Transparency = obj.Transparency
         end
     end)
@@ -64,12 +71,28 @@ local function saveEffect(obj)
     if savedEffects[obj] ~= nil then return end
 
     pcall(function()
-        savedEffects[obj] = obj.Enabled
+        if obj:IsA("Highlight") then
+            savedEffects[obj] = {
+                Enabled = obj.Enabled,
+                FillTransparency = obj.FillTransparency,
+                OutlineTransparency = obj.OutlineTransparency
+            }
+        elseif obj:IsA("PostEffect")
+            or obj:IsA("ParticleEmitter")
+            or obj:IsA("Trail")
+            or obj:IsA("Beam")
+            or obj:IsA("Fire")
+            or obj:IsA("Smoke")
+            or obj:IsA("Sparkles") then
+            savedEffects[obj] = {
+                Enabled = obj.Enabled
+            }
+        end
     end)
 end
 
 local function optimizeObject(obj)
-    if not (state.fpsBoost or state.ultraBurik) then return end
+    if not state.fpsBoost then return end
 
     pcall(function()
         if obj:IsA("BasePart") then
@@ -77,22 +100,38 @@ local function optimizeObject(obj)
             obj.Material = Enum.Material.SmoothPlastic
             obj.Reflectance = 0
             obj.CastShadow = false
+            obj.MaterialVariant = ""
 
         elseif obj:IsA("Decal") or obj:IsA("Texture") then
             savePart(obj)
             obj.Transparency = 1
 
-        elseif obj:IsA("MeshPart") and state.ultraBurik then
+        elseif obj:IsA("MeshPart") then
             savePart(obj)
             obj.TextureID = ""
 
-        elseif obj:IsA("SpecialMesh") and state.ultraBurik then
+        elseif obj:IsA("SpecialMesh") then
             savePart(obj)
             obj.TextureId = ""
 
+        elseif obj:IsA("SurfaceAppearance") then
+            if not savedSurface[obj] then
+                savedSurface[obj] = obj.Parent
+                obj.Parent = nil
+            end
+
+        elseif obj:IsA("Highlight") then
+            saveEffect(obj)
+            obj.Enabled = false
+            obj.FillTransparency = 1
+            obj.OutlineTransparency = 1
+
         elseif obj:IsA("ParticleEmitter")
             or obj:IsA("Trail")
-            or obj:IsA("Beam") then
+            or obj:IsA("Beam")
+            or obj:IsA("Fire")
+            or obj:IsA("Smoke")
+            or obj:IsA("Sparkles") then
             saveEffect(obj)
             obj.Enabled = false
         end
@@ -101,7 +140,7 @@ end
 
 local function restoreVisuals()
     for obj, data in pairs(savedParts) do
-        if obj and obj.Parent then
+        if obj then
             pcall(function()
                 for property, value in pairs(data) do
                     obj[property] = value
@@ -110,26 +149,46 @@ local function restoreVisuals()
         end
     end
 
-    for obj, enabled in pairs(savedEffects) do
-        if obj and obj.Parent then
+    for obj, data in pairs(savedEffects) do
+        if obj then
             pcall(function()
-                obj.Enabled = enabled
+                for property, value in pairs(data) do
+                    obj[property] = value
+                end
             end)
         end
     end
 
+    for obj, parent in pairs(savedSurface) do
+        if obj and parent and parent.Parent then
+            pcall(function()
+                obj.Parent = parent
+            end)
+        end
+    end
+
+    table.clear(savedParts)
+    table.clear(savedEffects)
+    table.clear(savedSurface)
+
     Lighting.GlobalShadows = savedLighting.GlobalShadows
     Lighting.FogEnd = savedLighting.FogEnd
+    Lighting.EnvironmentSpecularScale =
+        savedLighting.EnvironmentSpecularScale
+    Lighting.EnvironmentDiffuseScale =
+        savedLighting.EnvironmentDiffuseScale
 end
 
 local function applyOptimization()
-    if state.fpsBoost or state.ultraBurik then
+    if state.fpsBoost then
         for _, obj in ipairs(Workspace:GetDescendants()) do
             optimizeObject(obj)
         end
 
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 1000000
+        Lighting.EnvironmentSpecularScale = 0
+        Lighting.EnvironmentDiffuseScale = 0
     else
         restoreVisuals()
     end
@@ -160,17 +219,6 @@ local function applyBlackSky()
 end
 
 local function applyAntiBlur()
-    if not (state.antiBlur or state.noShake) then
-        for obj, enabled in pairs(savedEffects) do
-            if obj and obj.Parent and obj:IsA("BlurEffect") then
-                pcall(function()
-                    obj.Enabled = enabled
-                end)
-            end
-        end
-        return
-    end
-
     local containers = {Lighting}
 
     if Workspace.CurrentCamera then
@@ -180,8 +228,14 @@ local function applyAntiBlur()
     for _, container in ipairs(containers) do
         for _, obj in ipairs(container:GetDescendants()) do
             if obj:IsA("BlurEffect") then
-                saveEffect(obj)
-                obj.Enabled = false
+                if state.antiBlur or state.noShake then
+                    saveEffect(obj)
+                    obj.Enabled = false
+                elseif savedEffects[obj] then
+                    pcall(function()
+                        obj.Enabled = savedEffects[obj].Enabled
+                    end)
+                end
             end
         end
     end
@@ -210,7 +264,7 @@ gui.Parent = playerGui
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.fromOffset(300, 485)
+main.Size = UDim2.fromOffset(300, 425)
 main.Position = UDim2.new(0, 24, 0.2, 0)
 main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 main.BorderSizePixel = 0
@@ -311,16 +365,15 @@ local function createToggle(key, label, y, callback)
     end)
 end
 
-createToggle("fpsBoost", "FPS Boost / Low Texture", 87, applyOptimization)
-createToggle("ultraBurik", "ULTRA BURIK", 124, applyOptimization)
-createToggle("blackSky", "Black Sky", 161, applyBlackSky)
-createToggle("antiBlur", "Anti-Blur", 198, applyAntiBlur)
-createToggle("fullBright", "Full Bright", 235, applyFullBright)
-createToggle("noShake", "No Shake (Safe)", 272, applyAntiBlur)
+createToggle("fpsBoost", "FPS BOOST", 87, applyOptimization)
+createToggle("blackSky", "Black Sky", 124, applyBlackSky)
+createToggle("antiBlur", "Anti-Blur", 161, applyAntiBlur)
+createToggle("fullBright", "Full Bright", 198, applyFullBright)
+createToggle("noShake", "No Shake (Safe)", 235, applyAntiBlur)
 
 local fontTitle = Instance.new("TextLabel")
 fontTitle.Size = UDim2.new(1, -24, 0, 20)
-fontTitle.Position = UDim2.fromOffset(12, 309)
+fontTitle.Position = UDim2.fromOffset(12, 272)
 fontTitle.BackgroundTransparency = 1
 fontTitle.Text = "Font"
 fontTitle.TextColor3 = Color3.new(1, 1, 1)
@@ -345,7 +398,7 @@ local selectedFont = 1
 
 local fontButton = Instance.new("TextButton")
 fontButton.Size = UDim2.new(1, -24, 0, 30)
-fontButton.Position = UDim2.fromOffset(12, 332)
+fontButton.Position = UDim2.fromOffset(12, 295)
 fontButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
 fontButton.BorderSizePixel = 0
 fontButton.TextColor3 = Color3.new(1, 1, 1)
@@ -371,7 +424,7 @@ end
 
 local applyButton = Instance.new("TextButton")
 applyButton.Size = UDim2.new(0.5, -16, 0, 30)
-applyButton.Position = UDim2.fromOffset(12, 369)
+applyButton.Position = UDim2.fromOffset(12, 332)
 applyButton.BackgroundColor3 = Color3.fromRGB(145, 25, 35)
 applyButton.BorderSizePixel = 0
 applyButton.Text = "Apply"
@@ -384,7 +437,7 @@ Instance.new("UICorner", applyButton).CornerRadius = UDim.new(0, 6)
 
 local resetButton = Instance.new("TextButton")
 resetButton.Size = UDim2.new(0.5, -16, 0, 30)
-resetButton.Position = UDim2.new(0.5, 4, 0, 369)
+resetButton.Position = UDim2.new(0.5, 4, 0, 332)
 resetButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
 resetButton.BorderSizePixel = 0
 resetButton.Text = "Reset"
@@ -407,7 +460,7 @@ end)
 
 local note = Instance.new("TextLabel")
 note.Size = UDim2.new(1, -24, 0, 35)
-note.Position = UDim2.fromOffset(12, 410)
+note.Position = UDim2.fromOffset(12, 370)
 note.BackgroundTransparency = 1
 note.Text = "Right Alt: buka/tutup menu"
 note.TextColor3 = Color3.fromRGB(190, 190, 200)
@@ -427,7 +480,6 @@ do
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
-
             dragging = true
             dragStart = input.Position
             startPosition = main.Position
@@ -445,7 +497,6 @@ do
 
         if input.UserInputType == Enum.UserInputType.MouseMovement
             or input.UserInputType == Enum.UserInputType.Touch then
-
             local delta = input.Position - dragStart
 
             main.Position = UDim2.new(
@@ -473,7 +524,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 Workspace.DescendantAdded:Connect(function(obj)
-    if state.fpsBoost or state.ultraBurik then
+    if state.fpsBoost then
         task.defer(function()
             if obj and obj.Parent then
                 optimizeObject(obj)
@@ -485,6 +536,10 @@ end)
 Lighting.DescendantAdded:Connect(function(obj)
     if obj:IsA("BlurEffect") and (state.antiBlur or state.noShake) then
         task.defer(applyAntiBlur)
+    end
+
+    if obj:IsA("Sky") and state.blackSky then
+        task.defer(applyBlackSky)
     end
 end)
 
