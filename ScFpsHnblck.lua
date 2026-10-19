@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
@@ -25,8 +26,12 @@ local changing = false
 
 local function remember(obj, prop)
     if not obj then return end
+
     saved[obj] = saved[obj] or {}
-    if saved[obj][prop] ~= nil then return end
+
+    if saved[obj][prop] ~= nil then
+        return
+    end
 
     local ok, value = pcall(function()
         return obj[prop]
@@ -40,6 +45,7 @@ end
 local function change(obj, prop, value)
     if not obj then return end
     remember(obj, prop)
+
     pcall(function()
         obj[prop] = value
     end)
@@ -47,10 +53,18 @@ end
 
 local function saveLighting()
     for _, prop in ipairs({
-        "Brightness", "Ambient", "OutdoorAmbient",
-        "GlobalShadows", "ExposureCompensation",
-        "ClockTime", "FogEnd", "ColorShift_Top",
-        "ColorShift_Bottom"
+        "Brightness",
+        "Ambient",
+        "OutdoorAmbient",
+        "GlobalShadows",
+        "ExposureCompensation",
+        "ClockTime",
+        "FogEnd",
+        "ColorShift_Top",
+        "ColorShift_Bottom",
+        "EnvironmentDiffuseScale",
+        "EnvironmentSpecularScale",
+        "ShadowSoftness"
     }) do
         if originalLighting[prop] == nil then
             pcall(function()
@@ -68,60 +82,87 @@ local function restoreLighting()
     end
 end
 
-local function isImportant(obj)
+local function hasName(obj, words)
     local current = obj
+
     while current and current ~= Workspace do
         local name = string.lower(current.Name)
-        if name:find("fence")
-            or name:find("barrier")
-            or name:find("loot")
-            or name:find("door")
-            or name:find("prompt")
-            or name:find("interaction")
-            or name:find("character") then
-            return true
+
+        for _, word in ipairs(words) do
+            if name:find(word, 1, true) then
+                return true
+            end
         end
+
         current = current.Parent
     end
+
     return false
 end
 
+local function isProtected(obj)
+    return hasName(obj, {
+        "loot",
+        "door",
+        "prompt",
+        "interaction",
+        "character",
+        "player",
+        "humanoid"
+    })
+end
+
+local function isFenceOrCar(obj)
+    return hasName(obj, {
+        "fence",
+        "barrier",
+        "railing",
+        "guardrail",
+        "car",
+        "vehicle",
+        "automobile"
+    })
+end
+
 local function optimize(obj)
-    if not State.fps or not obj or not obj.Parent then return end
+    if not State.fps or not obj or not obj.Parent then
+        return
+    end
+
+    if isProtected(obj) then
+        return
+    end
 
     if obj:IsA("BasePart") then
         change(obj, "CastShadow", false)
         change(obj, "Reflectance", 0)
 
-        if not isImportant(obj) then
-            change(obj, "Material", Enum.Material.SmoothPlastic)
+        if isFenceOrCar(obj) then
+            change(obj, "LocalTransparencyModifier", 1)
+            return
+        end
 
-            if obj:IsA("MeshPart") then
-                pcall(function()
-                    change(obj, "RenderFidelity", Enum.RenderFidelity.Performance)
-                end)
-                change(obj, "TextureID", "")
-            end
+        change(obj, "Material", Enum.Material.SmoothPlastic)
+
+        if obj:IsA("MeshPart") then
+            change(obj, "RenderFidelity", Enum.RenderFidelity.Performance)
+            change(obj, "TextureID", "")
         end
 
     elseif obj:IsA("SpecialMesh") then
-        if not isImportant(obj) then
-            change(obj, "TextureId", "")
-        end
+        change(obj, "TextureId", "")
 
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        if not isImportant(obj) then
-            change(obj, "Transparency", 1)
-        end
+        change(obj, "Transparency", 1)
 
     elseif obj:IsA("SurfaceAppearance") then
-        if not isImportant(obj) then
-            for _, prop in ipairs({
-                "ColorMap", "MetalnessMap",
-                "NormalMap", "RoughnessMap"
-            }) do
-                change(obj, prop, "")
-            end
+        for _, prop in ipairs({
+            "ColorMap",
+            "MetalnessMap",
+            "NormalMap",
+            "RoughnessMap"
+        }) do
+            change(obj, prop, "")
         end
 
     elseif obj:IsA("ParticleEmitter")
@@ -130,9 +171,13 @@ local function optimize(obj)
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
         or obj:IsA("Sparkles") then
+
         change(obj, "Enabled", false)
 
     elseif obj:IsA("PostEffect") then
+        change(obj, "Enabled", false)
+
+    elseif obj:IsA("Clouds") then
         change(obj, "Enabled", false)
     end
 end
@@ -147,6 +192,7 @@ local function graySky()
             if savedSky[obj] == nil then
                 savedSky[obj] = obj.Parent
             end
+
             pcall(function()
                 obj.Parent = nil
             end)
@@ -194,6 +240,7 @@ local function restoreSky()
                 sky.Parent = parent or Lighting
             end)
         end
+
         savedSky[sky] = nil
     end
 
@@ -205,6 +252,7 @@ local function restoreSky()
                 end)
             end
         end
+
         savedAtmos[atmosphere] = nil
     end
 
@@ -212,6 +260,7 @@ local function restoreSky()
         pcall(function()
             generatedAtmosphere:Destroy()
         end)
+
         generatedAtmosphere = nil
     end
 end
@@ -225,46 +274,9 @@ local function restoreObjects()
                 end)
             end
         end
+
         saved[obj] = nil
     end
-end
-
-local function applyFPS()
-    if changing then return end
-    changing = true
-
-    if State.fps then
-        saveLighting()
-
-        pcall(function()
-            Lighting.GlobalShadows = false
-        end)
-
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            optimize(obj)
-        end
-
-        for _, obj in ipairs(Lighting:GetDescendants()) do
-            optimize(obj)
-        end
-
-        graySky()
-    else
-        restoreObjects()
-        restoreSky()
-        restoreLighting()
-
-        if State.bright then
-            pcall(function()
-                Lighting.Brightness = 1.5
-                Lighting.Ambient = Color3.fromRGB(160, 160, 165)
-                Lighting.OutdoorAmbient = Color3.fromRGB(170, 170, 175)
-                Lighting.ExposureCompensation = 0
-            end)
-        end
-    end
-
-    changing = false
 end
 
 local function applyBright()
@@ -283,9 +295,52 @@ local function applyBright()
         if State.fps then
             pcall(function()
                 Lighting.GlobalShadows = false
+                Lighting.EnvironmentSpecularScale = 0
+                Lighting.EnvironmentDiffuseScale = 0
             end)
         end
     end
+end
+
+local function applyFPS()
+    if changing then return end
+    changing = true
+
+    if State.fps then
+        saveLighting()
+
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.EnvironmentSpecularScale = 0
+            Lighting.EnvironmentDiffuseScale = 0
+            Lighting.ShadowSoftness = 0
+        end)
+
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            optimize(obj)
+        end
+
+        for _, obj in ipairs(Lighting:GetDescendants()) do
+            optimize(obj)
+        end
+
+        local terrain = Workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            change(terrain, "Decoration", false)
+        end
+
+        graySky()
+    else
+        restoreObjects()
+        restoreSky()
+        restoreLighting()
+
+        if State.bright then
+            applyBright()
+        end
+    end
+
+    changing = false
 end
 
 local function setPrompt(obj)
@@ -303,6 +358,7 @@ local function setPrompt(obj)
         pcall(function()
             obj.HoldDuration = savedPrompts[obj]
         end)
+
         savedPrompts[obj] = nil
     end
 end
@@ -313,7 +369,7 @@ Workspace.DescendantAdded:Connect(function(obj)
             optimize(obj)
         end
 
-        if State.interact then
+        if State.interact and obj:IsA("ProximityPrompt") then
             setPrompt(obj)
         end
     end)
@@ -327,18 +383,22 @@ Lighting.DescendantAdded:Connect(function(obj)
             if savedSky[obj] == nil then
                 savedSky[obj] = obj.Parent
             end
+
             pcall(function()
                 obj.Parent = nil
             end)
+        elseif obj:IsA("Atmosphere") then
+            graySky()
         else
             optimize(obj)
-            graySky()
         end
     end)
 end)
 
 local old = PlayerGui:FindFirstChild("SCFPS_FarhanStore")
-if old then old:Destroy() end
+if old then
+    old:Destroy()
+end
 
 local screen = Instance.new("ScreenGui")
 screen.Name = "SCFPS_FarhanStore"
@@ -375,6 +435,7 @@ local stars = {}
 for i = 1, 24 do
     local star = Instance.new("Frame")
     local size = math.random(1, 2)
+
     star.Size = UDim2.fromOffset(size, size)
     star.Position = UDim2.new(math.random(), 0, math.random(), 0)
     star.BackgroundColor3 = Color3.fromRGB(190, 210, 255)
@@ -446,6 +507,7 @@ local function makeButton(text, y)
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 5)
     c.Parent = button
+
     return button
 end
 
@@ -469,11 +531,6 @@ end
 fpsButton.MouseButton1Click:Connect(function()
     State.fps = not State.fps
     applyFPS()
-
-    if State.bright then
-        applyBright()
-    end
-
     refreshButtons()
 end)
 
@@ -487,7 +544,9 @@ interactButton.MouseButton1Click:Connect(function()
     State.interact = not State.interact
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        setPrompt(obj)
+        if obj:IsA("ProximityPrompt") then
+            setPrompt(obj)
+        end
     end
 
     refreshButtons()
@@ -530,6 +589,7 @@ UIS.InputChanged:Connect(function(input)
         or input.UserInputType == Enum.UserInputType.Touch
     ) then
         local delta = input.Position - dragStart
+
         main.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
@@ -556,7 +616,10 @@ RunService.RenderStepped:Connect(function(dt)
             y = 0
             x = math.random()
         end
-        if x > 1 then x = 0 end
+
+        if x > 1 then
+            x = 0
+        end
 
         star.obj.Position = UDim2.new(x, 0, y, 0)
     end
@@ -578,6 +641,7 @@ task.spawn(function()
         if State.fps then
             graySky()
         end
+
         task.wait(1)
     end
 end)
