@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
@@ -110,11 +109,91 @@ local function isLeaf(obj)
     })
 end
 
-local function isWoodDecoration(obj)
+local function isGunStore(obj)
     return hasAnyName(obj, {
-        "wooddecor", "wood_decor", "woodplank",
-        "wood_panel", "tablecloth", "table_cloth",
-        "tarp", "awning"
+        "gunstore", "gun_store", "gun store",
+        "weaponstore", "weapon_store"
+    })
+end
+
+local function isGunStoreWood(obj)
+    local current = obj
+    local insideStore = false
+    local woodFound = false
+
+    while current and current ~= Workspace do
+        local name = string.lower(current.Name)
+
+        if name:find("gunstore", 1, true)
+            or name:find("gun_store", 1, true)
+            or name:find("gun store", 1, true)
+            or name:find("weaponstore", 1, true)
+            or name:find("weapon_store", 1, true) then
+            insideStore = true
+        end
+
+        if name:find("wood", 1, true)
+            or name:find("plank", 1, true)
+            or name:find("timber", 1, true)
+            or name:find("wooden", 1, true) then
+            woodFound = true
+        end
+
+        current = current.Parent
+    end
+
+    if insideStore and woodFound then
+        return true
+    end
+
+    if insideStore and obj:IsA("BasePart") then
+        local ok, material = pcall(function()
+            return obj.Material
+        end)
+
+        if ok and material == Enum.Material.Wood then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function isGun(obj)
+    local current = obj
+
+    while current and current ~= Workspace do
+        local name = string.lower(current.Name)
+
+        if name:find("gunstore", 1, true)
+            or name:find("gun_store", 1, true)
+            or name:find("gun store", 1, true) then
+            return false
+        end
+
+        if name:find("weapon", 1, true)
+            or name:find("firearm", 1, true)
+            or name:find("pistol", 1, true)
+            or name:find("rifle", 1, true)
+            or name:find("shotgun", 1, true)
+            or name:find("revolver", 1, true)
+            or name:find("smg", 1, true) then
+            return true
+        end
+
+        if name == "gun" or name:match("^gun[%s_%-]") then
+            return true
+        end
+
+        current = current.Parent
+    end
+
+    return false
+end
+
+local function isLaser(obj)
+    return hasAnyName(obj, {
+        "laser", "muzzle", "tracer", "beam"
     })
 end
 
@@ -125,39 +204,62 @@ local function optimize(obj)
 
     if isProtected(obj) then return end
 
+    if isGunStoreWood(obj) then
+        if obj:IsA("BasePart") then
+            change(obj, "LocalTransparencyModifier", 1)
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            change(obj, "Transparency", 1)
+        end
+        return
+    end
+
+    local car = isCar(obj)
+    local gun = isGun(obj)
+    local laser = isLaser(obj)
+
     if obj:IsA("BasePart") then
         change(obj, "CastShadow", false)
         change(obj, "Reflectance", 0)
 
-        if isLeaf(obj) or isWoodDecoration(obj) then
+        if isLeaf(obj) then
             change(obj, "LocalTransparencyModifier", 1)
             return
         end
 
-        change(obj, "Material", Enum.Material.SmoothPlastic)
+        if gun and not laser then
+            change(obj, "Color", Color3.fromRGB(0, 0, 0))
+            change(obj, "Material", Enum.Material.SmoothPlastic)
+            change(obj, "Reflectance", 0)
+        elseif not car then
+            change(obj, "Material", Enum.Material.SmoothPlastic)
+        end
 
         if obj:IsA("MeshPart") then
             change(obj, "RenderFidelity", Enum.RenderFidelity.Performance)
-            change(obj, "TextureID", "")
-        end
 
-        if isCar(obj) then
-            change(obj, "Material", Enum.Material.SmoothPlastic)
-            change(obj, "Reflectance", 0)
+            if not car and not gun then
+                change(obj, "TextureID", "")
+            end
         end
 
     elseif obj:IsA("SpecialMesh") then
-        change(obj, "TextureId", "")
+        if not car and not gun then
+            change(obj, "TextureId", "")
+        end
 
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        change(obj, "Transparency", 1)
+        if not car and not gun and not laser then
+            change(obj, "Transparency", 1)
+        end
 
     elseif obj:IsA("SurfaceAppearance") then
-        for _, prop in ipairs({
-            "ColorMap", "MetalnessMap",
-            "NormalMap", "RoughnessMap"
-        }) do
-            change(obj, prop, "")
+        if not car and not gun then
+            for _, prop in ipairs({
+                "ColorMap", "MetalnessMap",
+                "NormalMap", "RoughnessMap"
+            }) do
+                change(obj, prop, "")
+            end
         end
 
     elseif obj:IsA("ParticleEmitter")
@@ -166,7 +268,9 @@ local function optimize(obj)
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
         or obj:IsA("Sparkles") then
-        change(obj, "Enabled", false)
+        if not laser then
+            change(obj, "Enabled", false)
+        end
 
     elseif obj:IsA("PostEffect") then
         change(obj, "Enabled", false)
