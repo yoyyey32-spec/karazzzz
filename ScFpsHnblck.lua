@@ -26,12 +26,9 @@ local changing = false
 
 local function remember(obj, prop)
     if not obj then return end
-
     saved[obj] = saved[obj] or {}
 
-    if saved[obj][prop] ~= nil then
-        return
-    end
+    if saved[obj][prop] ~= nil then return end
 
     local ok, value = pcall(function()
         return obj[prop]
@@ -53,18 +50,11 @@ end
 
 local function saveLighting()
     for _, prop in ipairs({
-        "Brightness",
-        "Ambient",
-        "OutdoorAmbient",
-        "GlobalShadows",
-        "ExposureCompensation",
-        "ClockTime",
-        "FogEnd",
-        "ColorShift_Top",
-        "ColorShift_Bottom",
-        "EnvironmentDiffuseScale",
-        "EnvironmentSpecularScale",
-        "ShadowSoftness"
+        "Brightness", "Ambient", "OutdoorAmbient",
+        "GlobalShadows", "ExposureCompensation",
+        "ClockTime", "FogEnd", "ColorShift_Top",
+        "ColorShift_Bottom", "EnvironmentDiffuseScale",
+        "EnvironmentSpecularScale", "ShadowSoftness"
     }) do
         if originalLighting[prop] == nil then
             pcall(function()
@@ -82,7 +72,7 @@ local function restoreLighting()
     end
 end
 
-local function hasName(obj, words)
+local function hasAnyName(obj, words)
     local current = obj
 
     while current and current ~= Workspace do
@@ -101,26 +91,30 @@ local function hasName(obj, words)
 end
 
 local function isProtected(obj)
-    return hasName(obj, {
-        "loot",
-        "door",
-        "prompt",
-        "interaction",
-        "character",
-        "player",
-        "humanoid"
+    return hasAnyName(obj, {
+        "loot", "door", "prompt", "interaction",
+        "character", "player", "humanoid"
     })
 end
 
-local function isFenceOrCar(obj)
-    return hasName(obj, {
-        "fence",
-        "barrier",
-        "railing",
-        "guardrail",
-        "car",
-        "vehicle",
-        "automobile"
+local function isCar(obj)
+    return hasAnyName(obj, {
+        "car", "vehicle", "automobile"
+    })
+end
+
+local function isLeaf(obj)
+    return hasAnyName(obj, {
+        "leaf", "leaves", "foliage", "bush",
+        "treeleaves", "treetop", "canopy"
+    })
+end
+
+local function isWoodDecoration(obj)
+    return hasAnyName(obj, {
+        "wooddecor", "wood_decor", "woodplank",
+        "wood_panel", "tablecloth", "table_cloth",
+        "tarp", "awning"
     })
 end
 
@@ -129,15 +123,13 @@ local function optimize(obj)
         return
     end
 
-    if isProtected(obj) then
-        return
-    end
+    if isProtected(obj) then return end
 
     if obj:IsA("BasePart") then
         change(obj, "CastShadow", false)
         change(obj, "Reflectance", 0)
 
-        if isFenceOrCar(obj) then
+        if isLeaf(obj) or isWoodDecoration(obj) then
             change(obj, "LocalTransparencyModifier", 1)
             return
         end
@@ -149,6 +141,11 @@ local function optimize(obj)
             change(obj, "TextureID", "")
         end
 
+        if isCar(obj) then
+            change(obj, "Material", Enum.Material.SmoothPlastic)
+            change(obj, "Reflectance", 0)
+        end
+
     elseif obj:IsA("SpecialMesh") then
         change(obj, "TextureId", "")
 
@@ -157,10 +154,8 @@ local function optimize(obj)
 
     elseif obj:IsA("SurfaceAppearance") then
         for _, prop in ipairs({
-            "ColorMap",
-            "MetalnessMap",
-            "NormalMap",
-            "RoughnessMap"
+            "ColorMap", "MetalnessMap",
+            "NormalMap", "RoughnessMap"
         }) do
             change(obj, prop, "")
         end
@@ -171,7 +166,6 @@ local function optimize(obj)
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
         or obj:IsA("Sparkles") then
-
         change(obj, "Enabled", false)
 
     elseif obj:IsA("PostEffect") then
@@ -297,6 +291,7 @@ local function applyBright()
                 Lighting.GlobalShadows = false
                 Lighting.EnvironmentSpecularScale = 0
                 Lighting.EnvironmentDiffuseScale = 0
+                Lighting.ShadowSoftness = 0
             end)
         end
     end
@@ -396,9 +391,7 @@ Lighting.DescendantAdded:Connect(function(obj)
 end)
 
 local old = PlayerGui:FindFirstChild("SCFPS_FarhanStore")
-if old then
-    old:Destroy()
-end
+if old then old:Destroy() end
 
 local screen = Instance.new("ScreenGui")
 screen.Name = "SCFPS_FarhanStore"
@@ -617,9 +610,7 @@ RunService.RenderStepped:Connect(function(dt)
             x = math.random()
         end
 
-        if x > 1 then
-            x = 0
-        end
+        if x > 1 then x = 0 end
 
         star.obj.Position = UDim2.new(x, 0, y, 0)
     end
