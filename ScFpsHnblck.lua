@@ -1,489 +1,448 @@
-
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
-local Stats = game:GetService("Stats")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
-local oldGui = playerGui:FindFirstChild("SCFPS_FarhanStore")
-if oldGui then oldGui:Destroy() end
-
-local state = {
-    fpsBoost = false,
-    fullBright = false,
-    instantInteract = false,
-    guiVisible = true
+local State = {
+    fps = false,
+    bright = false,
+    interact = false,
+    visible = true
 }
 
-local savedObjects = setmetatable({}, {__mode = "k"})
-local savedEffects = setmetatable({}, {__mode = "k"})
+local saved = setmetatable({}, {__mode = "k"})
+local detached = setmetatable({}, {__mode = "k"})
 local savedPrompts = setmetatable({}, {__mode = "k"})
-local savedSkyParents = setmetatable({}, {__mode = "k"})
-local savedAtmosphere = setmetatable({}, {__mode = "k"})
+local generatedAtmosphere = nil
+local oldLighting = {}
+local oldAtmosphere = {}
+local savedAtmosphere = nil
 
-local savedLighting = {
-    GlobalShadows = Lighting.GlobalShadows,
-    FogEnd = Lighting.FogEnd,
-    Brightness = Lighting.Brightness,
-    Ambient = Lighting.Ambient,
-    OutdoorAmbient = Lighting.OutdoorAmbient,
-    ExposureCompensation = Lighting.ExposureCompensation,
-    ColorShift_Top = Lighting.ColorShift_Top
-}
+local function saveProperty(obj, prop)
+    saved[obj] = saved[obj] or {}
+    if saved[obj][prop] == nil then
+        local ok, value = pcall(function()
+            return obj[prop]
+        end)
+        if ok then
+            saved[obj][prop] = value
+        end
+    end
+end
 
-local grayAtmosphere
-local updating = false
+local function setProperty(obj, prop, value)
+    pcall(function()
+        saveProperty(obj, prop)
+        obj[prop] = value
+    end)
+end
 
-local function saveProperty(obj, property)
-    savedObjects[obj] = savedObjects[obj] or {}
-    local data = savedObjects[obj]
+local function optimize(obj)
+    if not State.fps or not obj or not obj.Parent then return end
 
-    if data[property] == nil then
+    if obj:IsA("MeshPart") then
+        setProperty(obj, "Material", Enum.Material.SmoothPlastic)
+        setProperty(obj, "Reflectance", 0)
+        setProperty(obj, "CastShadow", false)
+        setProperty(obj, "TextureID", "")
         pcall(function()
-            data[property] = obj[property]
+            setProperty(obj, "RenderFidelity", Enum.RenderFidelity.Performance)
+        end)
+    elseif obj:IsA("BasePart") then
+        setProperty(obj, "Material", Enum.Material.SmoothPlastic)
+        setProperty(obj, "Reflectance", 0)
+        setProperty(obj, "CastShadow", false)
+        pcall(function()
+            setProperty(obj, "MaterialVariant", "")
+        end)
+    elseif obj:IsA("SpecialMesh") then
+        setProperty(obj, "TextureId", "")
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        setProperty(obj, "Transparency", 1)
+    elseif obj:IsA("SurfaceAppearance") then
+        saveProperty(obj, "Parent")
+        pcall(function() obj.Parent = nil end)
+    elseif obj:IsA("ParticleEmitter")
+        or obj:IsA("Trail")
+        or obj:IsA("Beam")
+        or obj:IsA("Smoke")
+        or obj:IsA("Fire")
+        or obj:IsA("Sparkles") then
+        setProperty(obj, "Enabled", false)
+    elseif obj:IsA("PostEffect") then
+        setProperty(obj, "Enabled", false)
+    end
+end
+
+local function saveLighting()
+    for _, prop in ipairs({
+        "GlobalShadows", "Brightness", "Ambient",
+        "OutdoorAmbient", "ExposureCompensation",
+        "ColorShift_Top", "ColorShift_Bottom", "FogEnd"
+    }) do
+        pcall(function()
+            if oldLighting[prop] == nil then
+                oldLighting[prop] = Lighting[prop]
+            end
         end)
     end
 end
 
-local function saveEffect(obj)
-    if savedEffects[obj] ~= nil then return end
+local function makeGraySky()
+    if not State.fps then return end
+
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Sky") then
+            if detached[obj] == nil then
+                detached[obj] = obj.Parent
+            end
+            pcall(function() obj.Parent = nil end)
+        elseif obj:IsA("Atmosphere") and obj ~= generatedAtmosphere then
+            if savedAtmosphere ~= obj then
+                savedAtmosphere = obj
+                oldAtmosphere = {}
+                for _, prop in ipairs({
+                    "Color", "Decay", "Density", "Haze",
+                    "Glare", "Offset"
+                }) do
+                    pcall(function()
+                        oldAtmosphere[prop] = obj[prop]
+                    end)
+                end
+            end
+            pcall(function()
+                obj.Color = Color3.fromRGB(155, 155, 160)
+                obj.Decay = Color3.fromRGB(125, 125, 132)
+                obj.Density = 0.35
+                obj.Haze = 1.5
+                obj.Glare = 0
+                obj.Offset = 0.25
+            end)
+        end
+    end
+
+    if not Lighting:FindFirstChildOfClass("Atmosphere") then
+        generatedAtmosphere = Instance.new("Atmosphere")
+        generatedAtmosphere.Name = "SCFPS_GrayAtmosphere"
+        generatedAtmosphere.Color = Color3.fromRGB(155, 155, 160)
+        generatedAtmosphere.Decay = Color3.fromRGB(125, 125, 132)
+        generatedAtmosphere.Density = 0.35
+        generatedAtmosphere.Haze = 1.5
+        generatedAtmosphere.Glare = 0
+        generatedAtmosphere.Offset = 0.25
+        generatedAtmosphere.Parent = Lighting
+    end
 
     pcall(function()
-        savedEffects[obj] = obj.Enabled
+        Lighting.GlobalShadows = false
+        Lighting.ColorShift_Top = Color3.fromRGB(8, 8, 8)
+        Lighting.FogEnd = 1000000
     end)
 end
 
-local function optimizeObject(obj)
-    if not state.fpsBoost or not obj then return end
-
-    pcall(function()
-        if obj:IsA("MeshPart") then
-            saveProperty(obj, "Material")
-            saveProperty(obj, "Reflectance")
-            saveProperty(obj, "CastShadow")
-            saveProperty(obj, "TextureID")
-            saveProperty(obj, "RenderFidelity")
-
-            obj.Material = Enum.Material.SmoothPlastic
-            obj.Reflectance = 0
-            obj.CastShadow = false
-            obj.TextureID = ""
-            obj.RenderFidelity = Enum.RenderFidelity.Performance
-
-        elseif obj:IsA("BasePart") then
-            saveProperty(obj, "Material")
-            saveProperty(obj, "Reflectance")
-            saveProperty(obj, "CastShadow")
-
-            obj.Material = Enum.Material.SmoothPlastic
-            obj.Reflectance = 0
-            obj.CastShadow = false
-
+local function restoreSky()
+    for sky, parent in pairs(detached) do
+        if sky and parent then
             pcall(function()
-                saveProperty(obj, "MaterialVariant")
-                obj.MaterialVariant = ""
+                if parent.Parent or parent == Lighting then
+                    sky.Parent = parent
+                end
             end)
-
-        elseif obj:IsA("SpecialMesh") then
-            saveProperty(obj, "TextureId")
-            obj.TextureId = ""
-
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            saveProperty(obj, "Transparency")
-            obj.Transparency = 1
-
-        elseif obj:IsA("SurfaceAppearance") then
-            if not savedObjects[obj] then
-                savedObjects[obj] = {}
-            end
-            saveProperty(obj, "Parent")
-            obj.Parent = nil
-
-        elseif obj:IsA("ParticleEmitter")
-            or obj:IsA("Trail")
-            or obj:IsA("Beam")
-            or obj:IsA("Smoke")
-            or obj:IsA("Fire")
-            or obj:IsA("Sparkles")
-            or obj:IsA("PostEffect") then
-
-            saveEffect(obj)
-            obj.Enabled = false
         end
-    end)
+        detached[sky] = nil
+    end
+
+    if generatedAtmosphere then
+        pcall(function() generatedAtmosphere:Destroy() end)
+        generatedAtmosphere = nil
+    end
+
+    if savedAtmosphere and savedAtmosphere.Parent then
+        for prop, value in pairs(oldAtmosphere) do
+            pcall(function() savedAtmosphere[prop] = value end)
+        end
+    end
+    savedAtmosphere = nil
+    oldAtmosphere = {}
+
+    for prop, value in pairs(oldLighting) do
+        pcall(function() Lighting[prop] = value end)
+    end
 end
 
 local function restoreVisuals()
-    for obj, properties in pairs(savedObjects) do
+    for obj, properties in pairs(saved) do
         if obj then
-            for property, value in pairs(properties) do
+            for prop, value in pairs(properties) do
                 pcall(function()
-                    if property == "Parent" then
-                        if value and obj.Parent == nil then
-                            obj.Parent = value
-                        end
-                    elseif obj.Parent then
-                        obj[property] = value
+                    if prop == "Parent" then
+                        if value then obj.Parent = value end
+                    else
+                        obj[prop] = value
                     end
                 end)
             end
         end
+        saved[obj] = nil
     end
-
-    for obj, enabled in pairs(savedEffects) do
-        if obj and obj.Parent then
-            pcall(function()
-                obj.Enabled = enabled
-            end)
-        end
-    end
-
-    Lighting.GlobalShadows = savedLighting.GlobalShadows
-    Lighting.FogEnd = savedLighting.FogEnd
 end
 
-local function enforceGraySky()
-    if not state.fpsBoost then return end
-
-    for _, obj in ipairs(Lighting:GetChildren()) do
-        if obj:IsA("Sky") then
-            if savedSkyParents[obj] == nil then
-                savedSkyParents[obj] = obj.Parent
-            end
-            pcall(function()
-                obj.Parent = nil
-            end)
-        end
-    end
-
-    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-
-    if not atmosphere then
-        if not grayAtmosphere or grayAtmosphere.Parent ~= Lighting then
-            grayAtmosphere = Instance.new("Atmosphere")
-            grayAtmosphere.Name = "SCFPS_GrayAtmosphere"
-            grayAtmosphere.Parent = Lighting
-        end
-        atmosphere = grayAtmosphere
-    elseif atmosphere ~= grayAtmosphere and not savedAtmosphere[atmosphere] then
-        savedAtmosphere[atmosphere] = {
-            Color = atmosphere.Color,
-            Decay = atmosphere.Decay,
-            Density = atmosphere.Density,
-            Haze = atmosphere.Haze,
-            Glare = atmosphere.Glare,
-            Offset = atmosphere.Offset
-        }
-    end
-
-    if atmosphere then
-        pcall(function()
-            atmosphere.Color = Color3.fromRGB(155, 155, 160)
-            atmosphere.Decay = Color3.fromRGB(125, 125, 132)
-            atmosphere.Density = 0.35
-            atmosphere.Haze = 2
-            atmosphere.Glare = 0
-            atmosphere.Offset = 0.25
-        end)
-    end
-
-    Lighting.ColorShift_Top = Color3.fromRGB(110, 110, 115)
-    Lighting.GlobalShadows = false
-    Lighting.FogEnd = 1000000
-end
-
-local function restoreSky()
-    for obj, parent in pairs(savedSkyParents) do
-        if obj and parent then
-            pcall(function()
-                obj.Parent = parent
-            end)
-        end
-    end
-
-    for obj, properties in pairs(savedAtmosphere) do
-        if obj and obj.Parent then
-            pcall(function()
-                for property, value in pairs(properties) do
-                    obj[property] = value
-                end
-            end)
-        end
-    end
-
-    if grayAtmosphere and grayAtmosphere.Parent then
-        grayAtmosphere:Destroy()
-    end
-
-    grayAtmosphere = nil
-    Lighting.ColorShift_Top = savedLighting.ColorShift_Top
-end
-
-local function applyFPSBoost()
-    if updating then return end
-    updating = true
-
-    if state.fpsBoost then
+local function applyFPS()
+    if State.fps then
+        saveLighting()
         for _, obj in ipairs(Workspace:GetDescendants()) do
-            optimizeObject(obj)
+            optimize(obj)
         end
-
         for _, obj in ipairs(Lighting:GetDescendants()) do
-            if obj:IsA("PostEffect") then
-                saveEffect(obj)
-                obj.Enabled = false
-            end
+            optimize(obj)
         end
-
-        enforceGraySky()
+        makeGraySky()
     else
         restoreVisuals()
         restoreSky()
     end
-
-    updating = false
 end
 
-local function applyFullBright()
-    if state.fullBright then
+local function applyBright()
+    if State.bright then
+        saveLighting()
         Lighting.Brightness = 2
-        Lighting.Ambient = Color3.fromRGB(135, 135, 135)
-        Lighting.OutdoorAmbient = Color3.fromRGB(155, 155, 155)
-        Lighting.ExposureCompensation = 0.1
+        Lighting.Ambient = Color3.fromRGB(105, 105, 110)
+        Lighting.OutdoorAmbient = Color3.fromRGB(125, 125, 130)
+        Lighting.ExposureCompensation = 0
     else
-        Lighting.Brightness = savedLighting.Brightness
-        Lighting.Ambient = savedLighting.Ambient
-        Lighting.OutdoorAmbient = savedLighting.OutdoorAmbient
-        Lighting.ExposureCompensation = savedLighting.ExposureCompensation
+        for prop, value in pairs(oldLighting) do
+            pcall(function() Lighting[prop] = value end)
+        end
     end
 end
 
-local function setInstantPrompt(obj)
-    if not state.instantInteract or not obj:IsA("ProximityPrompt") then
-        return
-    end
+local function setPrompt(prompt)
+    if not prompt:IsA("ProximityPrompt") then return end
 
-    if savedPrompts[obj] == nil then
-        savedPrompts[obj] = obj.HoldDuration
+    if State.interact then
+        if savedPrompts[prompt] == nil then
+            savedPrompts[prompt] = prompt.HoldDuration
+        end
+        prompt.HoldDuration = 0
+    elseif savedPrompts[prompt] ~= nil then
+        pcall(function()
+            prompt.HoldDuration = savedPrompts[prompt]
+        end)
+        savedPrompts[prompt] = nil
     end
+end
 
-    pcall(function()
-        obj.HoldDuration = 0
+Workspace.DescendantAdded:Connect(function(obj)
+    task.defer(function()
+        if State.fps then optimize(obj) end
+        if State.interact then setPrompt(obj) end
     end)
-end
+end)
 
-local function applyInstantInteract()
-    if state.instantInteract then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            setInstantPrompt(obj)
-        end
-    else
-        for obj, duration in pairs(savedPrompts) do
-            if obj and obj.Parent then
-                pcall(function()
-                    obj.HoldDuration = duration
-                end)
+Lighting.DescendantAdded:Connect(function(obj)
+    task.defer(function()
+        if State.fps then
+            if obj:IsA("Sky") then
+                if detached[obj] == nil then detached[obj] = obj.Parent end
+                pcall(function() obj.Parent = nil end)
+            else
+                optimize(obj)
+                makeGraySky()
             end
-            savedPrompts[obj] = nil
         end
-    end
-end
+    end)
+end)
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "SCFPS_FarhanStore"
-gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
+local screen = Instance.new("ScreenGui")
+screen.Name = "SCFPS_FarhanStore"
+screen.ResetOnSpawn = false
+screen.IgnoreGuiInset = false
+screen.DisplayOrder = 999
+screen.Parent = PlayerGui
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.fromOffset(220, 180)
+main.Size = UDim2.fromOffset(215, 169)
 main.Position = UDim2.new(0, 12, 0, 70)
-main.BackgroundColor3 = Color3.fromRGB(5, 6, 11)
+main.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
 main.BorderSizePixel = 0
 main.ClipsDescendants = true
-main.Parent = gui
+main.Parent = screen
 
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 7)
+corner.Parent = main
 
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(55, 91, 145)
-stroke.Thickness = 1
-stroke.Parent = main
+local outline = Instance.new("UIStroke")
+outline.Color = Color3.fromRGB(50, 125, 255)
+outline.Thickness = 1
+outline.Parent = main
 
-local stars = Instance.new("Frame")
-stars.Name = "Stars"
-stars.Size = UDim2.fromScale(1, 1)
-stars.BackgroundTransparency = 1
-stars.ClipsDescendants = true
-stars.ZIndex = 1
-stars.Parent = main
+local starLayer = Instance.new("Frame")
+starLayer.Size = UDim2.fromScale(1, 1)
+starLayer.BackgroundTransparency = 1
+starLayer.ClipsDescendants = true
+starLayer.ZIndex = 1
+starLayer.Parent = main
 
-local random = Random.new()
-
-for i = 1, 30 do
-    local dot = Instance.new("Frame")
-    local size = random:NextInteger(1, 2)
-
-    dot.Size = UDim2.fromOffset(size, size)
-    dot.Position = UDim2.fromScale(random:NextNumber(), random:NextNumber())
-    dot.BackgroundColor3 = Color3.fromRGB(205, 220, 255)
-    dot.BackgroundTransparency = random:NextNumber(0.15, 0.6)
-    dot.BorderSizePixel = 0
-    dot.ZIndex = 1
-    dot.Parent = stars
-end
-
-local shootingStars = {}
-
-for i = 1, 3 do
-    local trail = Instance.new("Frame")
-    trail.Name = "ShootingStar"
-    trail.Size = UDim2.fromOffset(random:NextInteger(12, 25), 1)
-    trail.AnchorPoint = Vector2.new(0.5, 0.5)
-    trail.Rotation = 35
-    trail.BackgroundColor3 = Color3.fromRGB(155, 195, 255)
-    trail.BorderSizePixel = 0
-    trail.ZIndex = 2
-    trail.Parent = stars
-
-    shootingStars[i] = {
-        object = trail,
-        x = random:NextNumber(-0.2, 1.1),
-        y = random:NextNumber(-0.5, 0.9),
-        speed = random:NextNumber(0.15, 0.35)
+local stars = {}
+for i = 1, 24 do
+    local star = Instance.new("Frame")
+    local size = math.random(1, 2)
+    star.Size = UDim2.fromOffset(size, size)
+    star.Position = UDim2.new(math.random(), 0, math.random(), 0)
+    star.BackgroundColor3 = Color3.fromRGB(190, 210, 255)
+    star.BackgroundTransparency = math.random(2, 7) / 10
+    star.BorderSizePixel = 0
+    star.ZIndex = 1
+    star.Parent = starLayer
+    stars[#stars + 1] = {
+        obj = star,
+        speed = math.random(10, 28),
+        drift = math.random(4, 13)
     }
 end
 
-local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 32)
-header.BackgroundColor3 = Color3.fromRGB(12, 23, 42)
-header.BackgroundTransparency = 0.05
-header.BorderSizePixel = 0
-header.ZIndex = 3
-header.Parent = main
-
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -43, 1, 0)
-title.Position = UDim2.fromOffset(9, 0)
+title.Size = UDim2.new(1, -48, 0, 27)
+title.Position = UDim2.fromOffset(9, 3)
 title.BackgroundTransparency = 1
 title.Text = "Farhan Store"
 title.TextColor3 = Color3.fromRGB(240, 245, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.ZIndex = 4
-title.Parent = header
+title.ZIndex = 3
+title.Parent = main
 
 local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(23, 22)
-close.Position = UDim2.new(1, -28, 0, 5)
-close.BackgroundColor3 = Color3.fromRGB(24, 44, 72)
-close.BorderSizePixel = 0
+close.Size = UDim2.fromOffset(23, 23)
+close.Position = UDim2.new(1, -27, 0, 4)
+close.BackgroundColor3 = Color3.fromRGB(30, 35, 48)
 close.Text = "X"
-close.TextColor3 = Color3.new(1, 1, 1)
-close.TextSize = 11
+close.TextColor3 = Color3.fromRGB(255, 255, 255)
+close.TextSize = 12
 close.Font = Enum.Font.GothamBold
+close.BorderSizePixel = 0
 close.ZIndex = 4
-close.Parent = header
+close.Parent = main
 
-Instance.new("UICorner", close).CornerRadius = UDim.new(0, 5)
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 5)
+closeCorner.Parent = close
 
-local pingLabel = Instance.new("TextLabel")
-pingLabel.Size = UDim2.new(1, -18, 0, 18)
-pingLabel.Position = UDim2.fromOffset(9, 36)
-pingLabel.BackgroundTransparency = 1
-pingLabel.Text = "PING: --"
-pingLabel.TextColor3 = Color3.fromRGB(120, 190, 255)
-pingLabel.TextSize = 10
-pingLabel.Font = Enum.Font.GothamMedium
-pingLabel.TextXAlignment = Enum.TextXAlignment.Left
-pingLabel.ZIndex = 3
-pingLabel.Parent = main
+local ping = Instance.new("TextLabel")
+ping.Size = UDim2.new(1, -18, 0, 17)
+ping.Position = UDim2.fromOffset(9, 29)
+ping.BackgroundTransparency = 1
+ping.Text = "PING: ..."
+ping.TextColor3 = Color3.fromRGB(160, 190, 255)
+ping.TextSize = 10
+ping.Font = Enum.Font.Gotham
+ping.TextXAlignment = Enum.TextXAlignment.Left
+ping.ZIndex = 3
+ping.Parent = main
 
-local buttons = {}
-
-local function updateButton(key)
-    local item = buttons[key]
-    if not item then return end
-
-    local enabled = state[key]
-    item.button.Text = item.label .. (enabled and "  ON" or "  OFF")
-    item.button.BackgroundColor3 = enabled
-        and Color3.fromRGB(24, 83, 145)
-        or Color3.fromRGB(17, 23, 35)
-end
-
-local function createToggle(key, label, y, callback)
+local function makeButton(text, y)
     local button = Instance.new("TextButton")
-    button.Name = key .. "Toggle"
-    button.Size = UDim2.new(1, -18, 0, 29)
+    button.Size = UDim2.new(1, -18, 0, 28)
     button.Position = UDim2.fromOffset(9, y)
-    button.BackgroundColor3 = Color3.fromRGB(17, 23, 35)
+    button.BackgroundColor3 = Color3.fromRGB(20, 38, 68)
     button.BorderSizePixel = 0
-    button.TextColor3 = Color3.fromRGB(245, 247, 255)
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(235, 240, 255)
     button.TextSize = 11
-    button.Font = Enum.Font.GothamSemibold
+    button.Font = Enum.Font.GothamBold
+    button.AutoButtonColor = true
     button.ZIndex = 3
     button.Parent = main
 
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 5)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = button
 
-    buttons[key] = {
-        button = button,
-        label = label
-    }
-
-    button.MouseButton1Click:Connect(function()
-        state[key] = not state[key]
-
-        local ok, err = pcall(callback)
-        if not ok then
-            warn("[SC FPS] " .. tostring(err))
-        end
-
-        updateButton(key)
-    end)
-
-    updateButton(key)
+    return button
 end
 
-createToggle("fpsBoost", "FPS BOOST", 57, applyFPSBoost)
-createToggle("fullBright", "FULL BRIGHT", 91, applyFullBright)
-createToggle("instantInteract", "FAST INTERACT", 125, applyInstantInteract)
+local fpsButton = makeButton("FPS BOOST: OFF", 51)
+local brightButton = makeButton("FULL BRIGHT: OFF", 85)
+local interactButton = makeButton("FAST INTERACT: OFF", 119)
+
+local function refreshButtons()
+    fpsButton.Text = "FPS BOOST: " .. (State.fps and "ON" or "OFF")
+    brightButton.Text = "FULL BRIGHT: " .. (State.bright and "ON" or "OFF")
+    interactButton.Text = "FAST INTERACT: " .. (State.interact and "ON" or "OFF")
+
+    fpsButton.BackgroundColor3 = State.fps
+        and Color3.fromRGB(25, 90, 55) or Color3.fromRGB(20, 38, 68)
+    brightButton.BackgroundColor3 = State.bright
+        and Color3.fromRGB(25, 90, 55) or Color3.fromRGB(20, 38, 68)
+    interactButton.BackgroundColor3 = State.interact
+        and Color3.fromRGB(25, 90, 55) or Color3.fromRGB(20, 38, 68)
+end
+
+fpsButton.MouseButton1Click:Connect(function()
+    State.fps = not State.fps
+    applyFPS()
+    refreshButtons()
+end)
+
+brightButton.MouseButton1Click:Connect(function()
+    State.bright = not State.bright
+    applyBright()
+    refreshButtons()
+end)
+
+interactButton.MouseButton1Click:Connect(function()
+    State.interact = not State.interact
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        setPrompt(obj)
+    end
+    refreshButtons()
+end)
+
+close.MouseButton1Click:Connect(function()
+    State.visible = false
+    main.Visible = false
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+
+    if input.KeyCode == Enum.KeyCode.RightAlt then
+        State.visible = not State.visible
+        main.Visible = State.visible
+    elseif input.KeyCode == Enum.KeyCode.X then
+        State.visible = false
+        main.Visible = false
+    end
+end)
 
 local dragging = false
 local dragStart
 local startPosition
 
-header.InputBegan:Connect(function(input)
+title.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
-
         dragging = true
         dragStart = input.Position
         startPosition = main.Position
-
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not dragging then return end
-
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-
+    if dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
         local delta = input.Position - dragStart
-
         main.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
@@ -493,113 +452,48 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-close.MouseButton1Click:Connect(function()
-    state.guiVisible = false
-    main.Visible = false
-end)
-
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-
-    if input.KeyCode == Enum.KeyCode.RightAlt then
-        state.guiVisible = not state.guiVisible
-        main.Visible = state.guiVisible
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
     end
 end)
-
-Workspace.DescendantAdded:Connect(function(obj)
-    task.defer(function()
-        if not obj or not obj.Parent then return end
-
-        if state.fpsBoost then
-            optimizeObject(obj)
-
-            if obj:IsA("Sky") then
-                enforceGraySky()
-            end
-        end
-
-        if state.instantInteract then
-            setInstantPrompt(obj)
-        end
-    end)
-end)
-
-Lighting.DescendantAdded:Connect(function(obj)
-    if not state.fpsBoost then return end
-
-    task.defer(function()
-        if not obj or not obj.Parent then return end
-
-        if obj:IsA("Sky") then
-            enforceGraySky()
-        elseif obj:IsA("PostEffect") then
-            saveEffect(obj)
-            obj.Enabled = false
-        end
-    end)
-end)
-
-local skyTimer = 0
-local starTimer = 0
 
 RunService.RenderStepped:Connect(function(dt)
-    starTimer += dt
-    skyTimer += dt
+    for _, star in ipairs(stars) do
+        local p = star.obj.Position
+        local x = p.X.Scale + (star.drift * dt / 1000)
+        local y = p.Y.Scale + (star.speed * dt / 1000)
 
-    if starTimer >= 0.04 then
-        starTimer = 0
-
-        for _, star in ipairs(shootingStars) do
-            local obj = star.object
-
-            star.x += star.speed * 0.04
-            star.y += star.speed * 0.04
-
-            if star.x > 1.15 or star.y > 1.15 then
-                star.x = random:NextNumber(-0.2, 0.1)
-                star.y = random:NextNumber(-0.4, 0.1)
-                star.speed = random:NextNumber(0.15, 0.35)
-            end
-
-            obj.Position = UDim2.fromScale(star.x, star.y)
+        if y > 1 then
+            y = 0
+            x = math.random()
         end
-    end
+        if x > 1 then x = 0 end
 
-    if skyTimer >= 0.5 then
-        skyTimer = 0
-
-        if state.fpsBoost then
-            enforceGraySky()
-
-            for _, obj in ipairs(Workspace:GetDescendants()) do
-                if obj:IsA("ProximityPrompt") and state.instantInteract then
-                    setInstantPrompt(obj)
-                end
-            end
-        end
+        star.obj.Position = UDim2.new(x, 0, y, 0)
     end
 end)
 
 task.spawn(function()
-    while gui.Parent do
-        local value = "--"
-
-        pcall(function()
-            local network = Stats:FindFirstChild("Network")
-            local serverStats = network and network:FindFirstChild("ServerStatsItem")
-            local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
-
-            if dataPing then
-                value = dataPing:GetValueString()
-            end
+    while screen.Parent do
+        local ok, result = pcall(function()
+            local item = Stats.Network.ServerStatsItem["Data Ping"]
+            return item:GetValueString()
         end)
-
-        if pingLabel and pingLabel.Parent then
-            pingLabel.Text = "PING: " .. value
-        end
-
+        ping.Text = ok and ("PING: " .. result) or "PING: N/A"
         task.wait(0.1)
     end
 end)
+
+task.spawn(function()
+    while screen.Parent do
+        if State.fps then
+            makeGraySky()
+        end
+        task.wait(1)
+    end
+end)
+
+refreshButtons()
 print("[SC FPS | Farhan Store] Loaded")
