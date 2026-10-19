@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
@@ -14,15 +15,19 @@ end
 
 local state = {
     fpsBoost = false,
+    ultraBurik = false,
+    blackSky = false,
+    antiBlur = false,
     fullBright = false,
-    guiVisible = true,
-    minimized = false
+    noShake = false,
+    guiVisible = true
 }
 
-local savedObjects = {}
-local savedEffects = {}
-local savedFPSLighting
-local savedLight = {
+local savedParts = setmetatable({}, {__mode = "k"})
+local savedEffects = setmetatable({}, {__mode = "k"})
+local savedSky = setmetatable({}, {__mode = "k"})
+
+local savedLighting = {
     Brightness = Lighting.Brightness,
     GlobalShadows = Lighting.GlobalShadows,
     Ambient = Lighting.Ambient,
@@ -31,195 +36,154 @@ local savedLight = {
     ExposureCompensation = Lighting.ExposureCompensation
 }
 
-local skyFaces = {
-    "SkyboxBk", "SkyboxDn", "SkyboxFt",
-    "SkyboxLf", "SkyboxRt", "SkyboxUp"
-}
+local function savePart(obj)
+    if savedParts[obj] then return end
 
-local graySky = ""
-
-local function remember(obj, properties)
-    if not obj then return end
-    savedObjects[obj] = savedObjects[obj] or {}
-
-    for _, property in ipairs(properties) do
-        if savedObjects[obj][property] == nil then
-            local ok, value = pcall(function()
-                return obj[property]
-            end)
-            if ok then
-                savedObjects[obj][property] = {value = value}
-            end
-        end
-    end
-end
-
-local function rememberEffect(obj)
-    if not obj or savedEffects[obj] ~= nil then return end
-    local ok, enabled = pcall(function()
-        return obj.Enabled
-    end)
-    if ok then
-        savedEffects[obj] = enabled
-    end
-end
-
-local function optimizeObject(obj)
-    if not state.fpsBoost or not obj or not obj.Parent then return end
+    local data = {}
 
     pcall(function()
         if obj:IsA("BasePart") then
-            remember(obj, {"Material", "Reflectance"})
+            data.Material = obj.Material
+            data.Reflectance = obj.Reflectance
+            data.CastShadow = obj.CastShadow
+        end
+
+        if obj:IsA("MeshPart") then
+            data.TextureID = obj.TextureID
+        elseif obj:IsA("SpecialMesh") then
+            data.TextureId = obj.TextureId
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            data.Transparency = obj.Transparency
+        end
+    end)
+
+    savedParts[obj] = data
+end
+
+local function saveEffect(obj)
+    if savedEffects[obj] ~= nil then return end
+
+    pcall(function()
+        savedEffects[obj] = obj.Enabled
+    end)
+end
+
+local function optimizeObject(obj)
+    if not (state.fpsBoost or state.ultraBurik) then return end
+
+    pcall(function()
+        if obj:IsA("BasePart") then
+            savePart(obj)
             obj.Material = Enum.Material.SmoothPlastic
             obj.Reflectance = 0
+            obj.CastShadow = false
 
         elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            remember(obj, {"Transparency"})
+            savePart(obj)
             obj.Transparency = 1
 
-        elseif obj:IsA("SurfaceAppearance") then
-            remember(obj, {"ColorMap", "NormalMap", "RoughnessMap", "MetalnessMap"})
-            obj.ColorMap = ""
-            obj.NormalMap = ""
-            obj.RoughnessMap = ""
-            obj.MetalnessMap = ""
+        elseif obj:IsA("MeshPart") and state.ultraBurik then
+            savePart(obj)
+            obj.TextureID = ""
 
-        elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail")
-            or obj:IsA("Beam") or obj:IsA("Fire")
-            or obj:IsA("Smoke") or obj:IsA("Sparkles") then
-            rememberEffect(obj)
+        elseif obj:IsA("SpecialMesh") and state.ultraBurik then
+            savePart(obj)
+            obj.TextureId = ""
+
+        elseif obj:IsA("ParticleEmitter")
+            or obj:IsA("Trail")
+            or obj:IsA("Beam") then
+            saveEffect(obj)
             obj.Enabled = false
         end
     end)
 end
 
-local function restoreWorld()
-    for obj, properties in pairs(savedObjects) do
-        for property, record in pairs(properties) do
+local function restoreVisuals()
+    for obj, data in pairs(savedParts) do
+        if obj and obj.Parent then
             pcall(function()
-                obj[property] = record.value
+                for property, value in pairs(data) do
+                    obj[property] = value
+                end
             end)
         end
     end
 
     for obj, enabled in pairs(savedEffects) do
-        pcall(function()
-            obj.Enabled = enabled
-        end)
-    end
-
-    if savedFPSLighting then
-        pcall(function()
-            Lighting.GlobalShadows = savedFPSLighting.GlobalShadows
-            Lighting.FogEnd = savedFPSLighting.FogEnd
-        end)
-    end
-
-    savedObjects = {}
-    savedEffects = {}
-    savedFPSLighting = nil
-end
-
-local function setGraySkyObject(obj)
-    if not obj then return end
-
-    if obj:IsA("Sky") then
-        local props = {"CelestialBodiesShown", "StarCount", "SunAngularSize", "MoonAngularSize", "SkyboxOrientation"}
-        for _, face in ipairs(skyFaces) do
-            table.insert(props, face)
-        end
-        remember(obj, props)
-
-        pcall(function()
-            obj.CelestialBodiesShown = false
-            obj.SunAngularSize = 0
-            obj.MoonAngularSize = 0
-            obj.StarCount = 0
-            obj.SkyboxOrientation = Vector3.zero
-        end)
-
-        for _, face in ipairs(skyFaces) do
+        if obj and obj.Parent then
             pcall(function()
-                obj[face] = graySky
+                obj.Enabled = enabled
             end)
         end
+    end
 
-    elseif obj:IsA("Atmosphere") then
-        remember(obj, {"Color", "Decay", "Density", "Glare", "Haze"})
-        pcall(function()
-            obj.Color = Color3.fromRGB(115, 115, 115)
-            obj.Decay = Color3.fromRGB(115, 115, 115)
-            obj.Density = 0.45
-            obj.Glare = 0
-            obj.Haze = 2
-        end)
+    Lighting.GlobalShadows = savedLighting.GlobalShadows
+    Lighting.FogEnd = savedLighting.FogEnd
+end
 
-    elseif obj:IsA("Clouds") then
-        remember(obj, {"Cover", "Density"})
-        pcall(function()
-            obj.Cover = 0
-            obj.Density = 0
-        end)
+local function applyOptimization()
+    if state.fpsBoost or state.ultraBurik then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            optimizeObject(obj)
+        end
+
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1000000
+    else
+        restoreVisuals()
     end
 end
 
-local function applyGraySky()
-    if not state.fpsBoost then return end
+local function applyBlackSky()
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Sky") then
+            if not savedSky[obj] then
+                savedSky[obj] = {
+                    CelestialBodiesShown = obj.CelestialBodiesShown,
+                    StarCount = obj.StarCount
+                }
+            end
 
-    for _, obj in ipairs(Lighting:GetDescendants()) do
-        if obj:IsA("Sky") or obj:IsA("Atmosphere") then
-            setGraySkyObject(obj)
-        end
-    end
-
-    for _, obj in ipairs(Workspace.Terrain:GetDescendants()) do
-        if obj:IsA("Clouds") then
-            setGraySkyObject(obj)
+            pcall(function()
+                if state.blackSky then
+                    obj.CelestialBodiesShown = false
+                    obj.StarCount = 0
+                else
+                    obj.CelestialBodiesShown =
+                        savedSky[obj].CelestialBodiesShown
+                    obj.StarCount = savedSky[obj].StarCount
+                end
+            end)
         end
     end
 end
-
 
 local function applyAntiBlur()
-    if not state.fpsBoost then return end
+    if not (state.antiBlur or state.noShake) then
+        for obj, enabled in pairs(savedEffects) do
+            if obj and obj.Parent and obj:IsA("BlurEffect") then
+                pcall(function()
+                    obj.Enabled = enabled
+                end)
+            end
+        end
+        return
+    end
 
-    local camera = Workspace.CurrentCamera
     local containers = {Lighting}
-    if camera then
-        table.insert(containers, camera)
+
+    if Workspace.CurrentCamera then
+        table.insert(containers, Workspace.CurrentCamera)
     end
 
     for _, container in ipairs(containers) do
         for _, obj in ipairs(container:GetDescendants()) do
             if obj:IsA("BlurEffect") then
-                rememberEffect(obj)
-                pcall(function()
-                    obj.Enabled = false
-                end)
+                saveEffect(obj)
+                obj.Enabled = false
             end
         end
-    end
-end
-
-local function applyFPSBoost()
-    if state.fpsBoost then
-        savedFPSLighting = {
-            GlobalShadows = Lighting.GlobalShadows,
-            FogEnd = Lighting.FogEnd
-        }
-
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            optimizeObject(obj)
-        end
-
-        pcall(function()
-            Lighting.GlobalShadows = false
-            Lighting.FogEnd = 1000000
-        end)
-        applyGraySky()
-        applyAntiBlur()
-    else
-        restoreWorld()
     end
 end
 
@@ -230,10 +194,11 @@ local function applyFullBright()
         Lighting.OutdoorAmbient = Color3.fromRGB(165, 165, 165)
         Lighting.ExposureCompensation = 0.15
     else
-        Lighting.Brightness = savedLight.Brightness
-        Lighting.Ambient = savedLight.Ambient
-        Lighting.OutdoorAmbient = savedLight.OutdoorAmbient
-        Lighting.ExposureCompensation = savedLight.ExposureCompensation
+        Lighting.Brightness = savedLighting.Brightness
+        Lighting.Ambient = savedLighting.Ambient
+        Lighting.OutdoorAmbient = savedLighting.OutdoorAmbient
+        Lighting.ExposureCompensation =
+            savedLighting.ExposureCompensation
     end
 end
 
@@ -245,160 +210,224 @@ gui.Parent = playerGui
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.fromOffset(222, 190)
-main.Position = UDim2.new(1, -242, 0.5, -95)
-main.BackgroundColor3 = Color3.fromRGB(7, 9, 15)
+main.Size = UDim2.fromOffset(300, 485)
+main.Position = UDim2.new(0, 24, 0.2, 0)
+main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 main.BorderSizePixel = 0
-main.ClipsDescendants = true
 main.Parent = gui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 14)
 
-local outline = Instance.new("UIStroke")
-outline.Color = Color3.fromRGB(220, 230, 245)
-outline.Thickness = 1.5
-outline.Parent = main
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
 
-math.randomseed(math.floor(os.clock() * 100000))
-for i = 1, 25 do
-    local star = Instance.new("Frame")
-    local size = (i % 5 == 0) and 3 or 2
-    star.Size = UDim2.fromOffset(size, size)
-    star.Position = UDim2.new(math.random(4, 96) / 100, 0, math.random(5, 95) / 100, 0)
-    star.BackgroundColor3 = (i % 4 == 0)
-        and Color3.fromRGB(70, 155, 255)
-        or Color3.fromRGB(170, 190, 220)
-    star.BackgroundTransparency = 0.25 + math.random() * 0.5
-    star.BorderSizePixel = 0
-    star.ZIndex = 1
-    star.Parent = main
-    Instance.new("UICorner", star).CornerRadius = UDim.new(1, 0)
-end
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(220, 55, 65)
+stroke.Thickness = 1.5
+stroke.Parent = main
 
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 44)
+header.BackgroundColor3 = Color3.fromRGB(145, 25, 35)
+header.BorderSizePixel = 0
+header.Parent = main
+
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -58, 0, 29)
-title.Position = UDim2.fromOffset(13, 8)
+title.Size = UDim2.new(1, -50, 1, 0)
+title.Position = UDim2.fromOffset(12, 0)
 title.BackgroundTransparency = 1
 title.Text = "Farhan Store"
-title.TextColor3 = Color3.fromRGB(245, 248, 255)
-title.TextSize = 15
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextSize = 17
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.ZIndex = 4
-title.Parent = main
+title.Parent = header
 
-local accent = Instance.new("Frame")
-accent.Size = UDim2.new(0, 55, 0, 2)
-accent.Position = UDim2.fromOffset(13, 35)
-accent.BackgroundColor3 = Color3.fromRGB(25, 125, 255)
-accent.BorderSizePixel = 0
-accent.ZIndex = 4
-accent.Parent = main
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(30, 28)
+close.Position = UDim2.new(1, -37, 0, 8)
+close.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+close.BorderSizePixel = 0
+close.Text = "X"
+close.TextColor3 = Color3.new(1, 1, 1)
+close.TextSize = 14
+close.Font = Enum.Font.GothamBold
+close.Parent = header
 
-local function makeButton(name, text, y)
-    local button = Instance.new("TextButton")
-    button.Name = name
-    button.Size = UDim2.new(1, -28, 0, 31)
-    button.Position = UDim2.fromOffset(14, y)
-    button.BackgroundColor3 = Color3.fromRGB(18, 48, 87)
-    button.BorderSizePixel = 0
-    button.AutoButtonColor = true
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(240, 246, 255)
-    button.TextSize = 12
-    button.Font = Enum.Font.GothamSemibold
-    button.ZIndex = 4
-    button.Parent = main
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
-    return button
-end
-
-local fpsButton = makeButton("FPSBoost", "FPS Boost  [OFF]", 49)
-local brightButton = makeButton("FullBright", "Full Bright  [OFF]", 86)
+Instance.new("UICorner", close).CornerRadius = UDim.new(0, 6)
 
 local pingLabel = Instance.new("TextLabel")
-pingLabel.Size = UDim2.new(1, -28, 0, 25)
-pingLabel.Position = UDim2.fromOffset(14, 126)
-pingLabel.BackgroundColor3 = Color3.fromRGB(13, 17, 27)
-pingLabel.BorderSizePixel = 0
+pingLabel.Size = UDim2.new(1, -24, 0, 25)
+pingLabel.Position = UDim2.fromOffset(12, 52)
+pingLabel.BackgroundColor3 = Color3.fromRGB(31, 31, 38)
 pingLabel.Text = "Ping: ..."
-pingLabel.TextColor3 = Color3.fromRGB(85, 190, 255)
+pingLabel.TextColor3 = Color3.fromRGB(100, 220, 130)
 pingLabel.TextSize = 12
 pingLabel.Font = Enum.Font.GothamMedium
-pingLabel.ZIndex = 4
 pingLabel.Parent = main
-Instance.new("UICorner", pingLabel).CornerRadius = UDim.new(0, 6)
 
-local minimize = Instance.new("TextButton")
-minimize.Name = "Minimize"
-minimize.Size = UDim2.fromOffset(19, 19)
-minimize.Position = UDim2.new(1, -28, 0, 7)
-minimize.BackgroundColor3 = Color3.fromRGB(0, 105, 230)
-minimize.BorderSizePixel = 0
-minimize.Text = "−"
-minimize.TextColor3 = Color3.new(1, 1, 1)
-minimize.TextSize = 16
-minimize.Font = Enum.Font.GothamBold
-minimize.ZIndex = 5
-minimize.Parent = main
-Instance.new("UICorner", minimize).CornerRadius = UDim.new(1, 0)
+Instance.new("UICorner", pingLabel).CornerRadius = UDim.new(0, 5)
 
-local hint = Instance.new("TextLabel")
-hint.Size = UDim2.new(1, -28, 0, 15)
-hint.Position = UDim2.fromOffset(14, 159)
-hint.BackgroundTransparency = 1
-hint.Text = "Right Alt: buka / tutup"
-hint.TextColor3 = Color3.fromRGB(150, 160, 180)
-hint.TextSize = 10
-hint.Font = Enum.Font.Gotham
-hint.ZIndex = 4
-hint.Parent = main
+local buttons = {}
 
-local function refreshButtons()
-    fpsButton.Text = "FPS Boost  [" .. (state.fpsBoost and "ON" or "OFF") .. "]"
-    fpsButton.BackgroundColor3 = state.fpsBoost
-        and Color3.fromRGB(0, 87, 170)
-        or Color3.fromRGB(18, 48, 87)
+local function updateButton(key)
+    local item = buttons[key]
+    if not item then return end
 
-    brightButton.Text = "Full Bright  [" .. (state.fullBright and "ON" or "OFF") .. "]"
-    brightButton.BackgroundColor3 = state.fullBright
-        and Color3.fromRGB(0, 87, 170)
-        or Color3.fromRGB(18, 48, 87)
+    local enabled = state[key]
+    item.button.Text = item.label .. (enabled and "  [ON]" or "  [OFF]")
+    item.button.BackgroundColor3 = enabled
+        and Color3.fromRGB(125, 30, 40)
+        or Color3.fromRGB(48, 48, 56)
 end
 
-fpsButton.MouseButton1Click:Connect(function()
-    state.fpsBoost = not state.fpsBoost
-    local ok, err = pcall(applyFPSBoost)
-    if not ok then warn("[Farhan Store] FPS Boost error: " .. tostring(err)) end
-    refreshButtons()
+local function createToggle(key, label, y, callback)
+    local button = Instance.new("TextButton")
+    button.Name = key .. "Toggle"
+    button.Size = UDim2.new(1, -24, 0, 32)
+    button.Position = UDim2.fromOffset(12, y)
+    button.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.TextSize = 12
+    button.Font = Enum.Font.GothamSemibold
+    button.Parent = main
+
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
+
+    buttons[key] = {
+        button = button,
+        label = label
+    }
+
+    button.MouseButton1Click:Connect(function()
+        state[key] = not state[key]
+
+        local ok, err = pcall(callback)
+        if not ok then
+            warn("[SC FPS] " .. tostring(err))
+        end
+
+        updateButton(key)
+    end)
+end
+
+createToggle("fpsBoost", "FPS Boost / Low Texture", 87, applyOptimization)
+createToggle("ultraBurik", "ULTRA BURIK", 124, applyOptimization)
+createToggle("blackSky", "Black Sky", 161, applyBlackSky)
+createToggle("antiBlur", "Anti-Blur", 198, applyAntiBlur)
+createToggle("fullBright", "Full Bright", 235, applyFullBright)
+createToggle("noShake", "No Shake (Safe)", 272, applyAntiBlur)
+
+local fontTitle = Instance.new("TextLabel")
+fontTitle.Size = UDim2.new(1, -24, 0, 20)
+fontTitle.Position = UDim2.fromOffset(12, 309)
+fontTitle.BackgroundTransparency = 1
+fontTitle.Text = "Font"
+fontTitle.TextColor3 = Color3.new(1, 1, 1)
+fontTitle.TextSize = 13
+fontTitle.Font = Enum.Font.GothamBold
+fontTitle.TextXAlignment = Enum.TextXAlignment.Left
+fontTitle.Parent = main
+
+local fontNames = {
+    "Default",
+    "Minecraft Regular",
+    "Lenmok"
+}
+
+local fontValues = {
+    Enum.Font.Gotham,
+    Enum.Font.Code,
+    Enum.Font.SciFi
+}
+
+local selectedFont = 1
+
+local fontButton = Instance.new("TextButton")
+fontButton.Size = UDim2.new(1, -24, 0, 30)
+fontButton.Position = UDim2.fromOffset(12, 332)
+fontButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+fontButton.BorderSizePixel = 0
+fontButton.TextColor3 = Color3.new(1, 1, 1)
+fontButton.TextSize = 12
+fontButton.Font = Enum.Font.Gotham
+fontButton.Text = "Font: Default  >"
+fontButton.Parent = main
+
+Instance.new("UICorner", fontButton).CornerRadius = UDim.new(0, 6)
+
+fontButton.MouseButton1Click:Connect(function()
+    selectedFont = selectedFont % #fontNames + 1
+    fontButton.Text = "Font: " .. fontNames[selectedFont] .. "  >"
 end)
 
-brightButton.MouseButton1Click:Connect(function()
-    state.fullBright = not state.fullBright
-    local ok, err = pcall(applyFullBright)
-    if not ok then warn("[Farhan Store] Full Bright error: " .. tostring(err)) end
-    refreshButtons()
+local function applyFont(font)
+    for _, obj in ipairs(gui:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            obj.Font = font
+        end
+    end
+end
+
+local applyButton = Instance.new("TextButton")
+applyButton.Size = UDim2.new(0.5, -16, 0, 30)
+applyButton.Position = UDim2.fromOffset(12, 369)
+applyButton.BackgroundColor3 = Color3.fromRGB(145, 25, 35)
+applyButton.BorderSizePixel = 0
+applyButton.Text = "Apply"
+applyButton.TextColor3 = Color3.new(1, 1, 1)
+applyButton.TextSize = 12
+applyButton.Font = Enum.Font.GothamBold
+applyButton.Parent = main
+
+Instance.new("UICorner", applyButton).CornerRadius = UDim.new(0, 6)
+
+local resetButton = Instance.new("TextButton")
+resetButton.Size = UDim2.new(0.5, -16, 0, 30)
+resetButton.Position = UDim2.new(0.5, 4, 0, 369)
+resetButton.BackgroundColor3 = Color3.fromRGB(48, 48, 56)
+resetButton.BorderSizePixel = 0
+resetButton.Text = "Reset"
+resetButton.TextColor3 = Color3.new(1, 1, 1)
+resetButton.TextSize = 12
+resetButton.Font = Enum.Font.GothamBold
+resetButton.Parent = main
+
+Instance.new("UICorner", resetButton).CornerRadius = UDim.new(0, 6)
+
+applyButton.MouseButton1Click:Connect(function()
+    applyFont(fontValues[selectedFont])
 end)
 
-minimize.MouseButton1Click:Connect(function()
-    state.minimized = not state.minimized
-    fpsButton.Visible = not state.minimized
-    brightButton.Visible = not state.minimized
-    pingLabel.Visible = not state.minimized
-    hint.Visible = not state.minimized
-    accent.Visible = not state.minimized
-    main.Size = state.minimized and UDim2.fromOffset(222, 48) or UDim2.fromOffset(222, 190)
-    minimize.Text = state.minimized and "+" or "−"
+resetButton.MouseButton1Click:Connect(function()
+    selectedFont = 1
+    applyFont(Enum.Font.Gotham)
+    fontButton.Text = "Font: Default  >"
 end)
+
+local note = Instance.new("TextLabel")
+note.Size = UDim2.new(1, -24, 0, 35)
+note.Position = UDim2.fromOffset(12, 410)
+note.BackgroundTransparency = 1
+note.Text = "Right Alt: buka/tutup menu"
+note.TextColor3 = Color3.fromRGB(190, 190, 200)
+note.TextSize = 11
+note.Font = Enum.Font.Gotham
+note.Parent = main
+
+for key in pairs(buttons) do
+    updateButton(key)
+end
 
 do
     local dragging = false
     local dragStart
     local startPosition
 
-    title.InputBegan:Connect(function(input)
+    header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
+
             dragging = true
             dragStart = input.Position
             startPosition = main.Position
@@ -413,9 +442,12 @@ do
 
     UserInputService.InputChanged:Connect(function(input)
         if not dragging then return end
+
         if input.UserInputType == Enum.UserInputType.MouseMovement
             or input.UserInputType == Enum.UserInputType.Touch then
+
             local delta = input.Position - dragStart
+
             main.Position = UDim2.new(
                 startPosition.X.Scale,
                 startPosition.X.Offset + delta.X,
@@ -426,62 +458,45 @@ do
     end)
 end
 
+close.MouseButton1Click:Connect(function()
+    state.guiVisible = false
+    main.Visible = false
+end)
+
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
+
     if input.KeyCode == Enum.KeyCode.RightAlt then
         state.guiVisible = not state.guiVisible
-        gui.Enabled = state.guiVisible
+        main.Visible = state.guiVisible
     end
 end)
 
 Workspace.DescendantAdded:Connect(function(obj)
-    task.defer(function()
-        if not obj or not obj.Parent then return end
-        if state.fpsBoost then
-            optimizeObject(obj)
-            if obj:IsA("Clouds") or obj:IsA("Sky") or obj:IsA("Atmosphere") then
-                setGraySkyObject(obj)
+    if state.fpsBoost or state.ultraBurik then
+        task.defer(function()
+            if obj and obj.Parent then
+                optimizeObject(obj)
             end
-            if obj:IsA("BlurEffect") then
-                rememberEffect(obj)
-                obj.Enabled = false
-            end
-        end
-    end)
+        end)
+    end
 end)
 
 Lighting.DescendantAdded:Connect(function(obj)
-    task.defer(function()
-        if not state.fpsBoost or not obj or not obj.Parent then return end
-        if obj:IsA("Sky") or obj:IsA("Atmosphere") then
-            setGraySkyObject(obj)
-        elseif obj:IsA("BlurEffect") then
-            rememberEffect(obj)
-            obj.Enabled = false
-        end
-    end)
-end)
-
-task.spawn(function()
-    while gui.Parent do
-        if state.fpsBoost then
-            pcall(applyBlackSky)
-            pcall(applyAntiBlur)
-        end
-        if state.fullBright then
-            pcall(applyFullBright)
-        end
-        task.wait(1)
+    if obj:IsA("BlurEffect") and (state.antiBlur or state.noShake) then
+        task.defer(applyAntiBlur)
     end
 end)
 
 task.spawn(function()
     while gui.Parent do
         local value = "N/A"
+
         pcall(function()
             local network = Stats:FindFirstChild("Network")
             local serverStats = network and network:FindFirstChild("ServerStatsItem")
             local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+
             if dataPing then
                 value = dataPing:GetValueString()
             end
@@ -490,9 +505,9 @@ task.spawn(function()
         if pingLabel and pingLabel.Parent then
             pingLabel.Text = "Ping: " .. value
         end
+
         task.wait(0.1)
     end
 end)
 
-refreshButtons()
-print("Farhan Store aktif")
+print("[SC FPS | Farhan Store] Loaded")
