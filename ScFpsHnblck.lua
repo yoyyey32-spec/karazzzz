@@ -24,38 +24,6 @@ local originalLighting = {}
 local generatedAtmosphere
 local changing = false
 
-    local function sa()
-        local a = {
-            "[S] I...", "[I] S...", "[W] P...",
-            "[D] O...", "[N] E...", "[P] A...",
-            "[S] S..."
-        }
-        return a[math.random(1, #a)]
-    end
-
-    local function fl()
-        local ls = game:GetService("LogService")
-        local oc = ls.MessageOut.Connect
-
-        hookfunction(oc, function(self, cb)
-            return oc(self, function(m)
-                for _, p in ipairs(c.bp) do
-                    if m:lower():find(p:lower()) then
-                        return
-                    end
-                end
-                if tick() - s.rnt >= c.rni then
-                    s.rnt = tick()
-                    cb(sa())
-                end
-                cb(m)
-            end)
-        end)
-    end
-
-    local function me()
-        getgenv().ie = function()
-
 local function remember(obj, prop)
     if not obj then return end
     saved[obj] = saved[obj] or {}
@@ -122,86 +90,6 @@ local function hasAnyName(obj, words)
     return false
 end
 
-local function sb()
-    local c = {
-        bp = {"Cheat", "Exploit", "Hack", "Script", "Inject", "Memory", "Speed", "Teleport", "Noclip", "Fly", "Bypass", "Macro", "AutoFarm", "WallHack", "AimBot", "SpeedHack", "NoClip", "InfiniteResource", "ModifiedClient", "GameModifier", "ClientModification", "RuntimePatch", "MemoryManipulation", "ProcessInjection"},
-        fe = {"Roblox Studio", "Roblox Client", "Roblox Player", "Roblox Beta", "Roblox Test Client", "RobloxPlayerBeta", "RobloxStudioBeta", "RobloxApp", "RobloxMobile"},
-        nt = {md = 0.05, mc = 100, at = 0.8},
-        lr = {min = 50, max = 100},
-        ok = 0x35ACED,
-        rni = 10,
-        doi = 30,
-        bm = {at = 0.7, lr = 0.01, hs = 100}
-    }
-
-    local s = {
-        nc = {},
-        lns = tick(),
-        rnt = tick(),
-        lo = math.random(c.lr.min, c.lr.max) / 1000,
-        os = math.random(1, 1000000),
-        bh = {},
-        as = 0
-    }
-
-    local function es(i, k)
-        local r = ""
-        for j = 1, #i do
-            local c = string.byte(i, j)
-            local b = k % 256
-            r = r .. string.char(bit32.bxor(c, b))
-            k = bit32.rshift(k, 8) + bit32.lshift(b, 24)
-        end
-        return r
-    end
-
-    local function ot(t, s)
-        local o = {}
-        for k, v in pairs(t) do
-            local ok = es(tostring(k), s)
-            if type(v) == "string" then
-                o[ok] = es(v, s)
-            elseif type(v) == "table" then
-                o[ok] = ot(v, s + 1)
-            else
-                o[ok] = v
-            end
-        end
-        return o
-    end
-
-    local function sa()
-        local a = {
-            "[S] I...", "[I] S...", "[W] P...",
-            "[D] O...", "[N] E...", "[P] A...",
-            "[S] S..."
-        }
-        return a[math.random(1, #a)]
-    end
-
-    local function fl()
-        local ls = game:GetService("LogService")
-        local oc = ls.MessageOut.Connect
-
-        hookfunction(oc, function(self, cb)
-            return oc(self, function(m)
-                for _, p in ipairs(c.bp) do
-                    if m:lower():find(p:lower()) then
-                        return
-                    end
-                end
-                if tick() - s.rnt >= c.rni then
-                    s.rnt = tick()
-                    cb(sa())
-                end
-                cb(m)
-            end)
-        end)
-    end
-
-    local function me()
-        getgenv().ie = function()
-        
 local function isProtected(obj)
     return hasAnyName(obj, {
         "loot", "door", "prompt", "interaction",
@@ -750,4 +638,4 @@ task.spawn(function()
 end)
 
 refreshButtons()
-print("[SC FPS | Farhan Store] ULTRA BURIK MAX Loaded")
+print("[SC FPS | Farhan Store] Loaded")
