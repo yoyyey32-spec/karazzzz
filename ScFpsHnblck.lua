@@ -115,13 +115,6 @@ local function isCar(obj)
     })
 end
 
-local function isLaser(obj)
-    return matches(obj, {
-        "laser", "tracer", "bullettrail", "bullet_trail",
-        "bullet trail", "muzzle", "shootingeffect", "weaponfx"
-    })
-end
-
 local function isLeaf(obj)
     return matches(obj, {
         "foliage", "leaves", "leaf", "treeleaves",
@@ -163,6 +156,8 @@ local function isFaceTexture(obj)
 end
 
 local function hideObject(obj)
+    if isFence(obj) then return end
+
     if obj:IsA("BasePart") then
         change(obj, "LocalTransparencyModifier", 1)
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
@@ -173,19 +168,32 @@ local function hideObject(obj)
     end
 end
 
+local function isWeaponOrAccessory(obj)
+    return matches(obj, {
+        "g17", "drum", "weapon", "gun", "pistol",
+        "firearm", "magazine", "ammo", "accessory"
+    })
+end
+
 local function optimize(obj)
     if not State.fps or not obj or not obj.Parent then return end
     if obj:IsA("ProximityPrompt") then return end
+    if protectedCharacter(obj) then return end
 
-    if isLaser(obj) then
-        hideObject(obj)
+    -- Senjata dan aksesorinya jangan dihilangkan
+    if isWeaponOrAccessory(obj) then
+        if obj:IsA("BasePart") then
+            change(obj, "CastShadow", false)
+            change(obj, "Reflectance", 0)
+            change(obj, "Material", Enum.Material.SmoothPlastic)
+        end
         return
     end
 
-    if protectedCharacter(obj) then return end
+    -- Pagar besi tetap terlihat
+    if isFence(obj) then return end
 
-    -- Pagar besi tetap ada.
-    -- Daun, tekstur muka, kayu tertentu dan interior mobil dikurangi.
+    -- Kurangi objek lingkungan tertentu
     if isFaceTexture(obj) or isLeaf(obj)
         or isGunStoreWood(obj) or isCarInterior(obj) then
         hideObject(obj)
@@ -199,37 +207,12 @@ local function optimize(obj)
         if not isCar(obj) then
             change(obj, "Material", Enum.Material.SmoothPlastic)
         end
-    end
-
-    if obj:IsA("Decal") or obj:IsA("Texture") then
-        change(obj, "Transparency", 1)
-    elseif obj:IsA("MeshPart") then
-        change(obj, "TextureID", "")
-    elseif obj:IsA("SpecialMesh") then
-        change(obj, "TextureId", "")
-    elseif obj:IsA("SurfaceAppearance") then
-        for _, prop in ipairs({
-            "ColorMap", "NormalMap",
-            "RoughnessMap", "MetalnessMap"
-        }) do
-            change(obj, prop, "")
-        end
     elseif obj:IsA("ParticleEmitter")
-        or obj:IsA("Trail")
-        or obj:IsA("Beam")
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
         or obj:IsA("Sparkles")
         or obj:IsA("BlurEffect") then
         change(obj, "Enabled", false)
-    end
-
-    if matches(obj, {"blood", "bloodsplatter", "blood_splatter"}) then
-        if obj:IsA("ParticleEmitter") then
-            change(obj, "Enabled", false)
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            change(obj, "Transparency", 1)
-        end
     end
 end
 
@@ -265,11 +248,27 @@ local function restoreBright()
             Lighting[prop] = value
         end)
     end
+
+    if State.fps then
+        applyGraySky()
+    end
 end
 
 local function applyGraySky()
+    saveLighting()
+
+    for _, prop in ipairs({
+        "ClockTime", "Brightness", "ExposureCompensation",
+        "GlobalShadows", "Ambient", "OutdoorAmbient"
+    }) do
+        remember(Lighting, prop)
+    end
+
     for _, obj in ipairs(Lighting:GetChildren()) do
-        if obj:IsA("Sky") then
+        if obj:IsA("Sky")
+            or (obj:IsA("Atmosphere") and obj ~= GrayAtmosphere)
+            or obj:IsA("Clouds") then
+
             if OriginalSky[obj] == nil then
                 OriginalSky[obj] = obj.Parent
             end
@@ -285,12 +284,25 @@ local function applyGraySky()
         GrayAtmosphere.Name = "SCFPS_GrayAtmosphere"
     end
 
-    GrayAtmosphere.Color = Color3.fromRGB(145, 145, 145)
-    GrayAtmosphere.Decay = Color3.fromRGB(90, 90, 90)
-    GrayAtmosphere.Density = 0.3
+    GrayAtmosphere.Color = Color3.fromRGB(75, 75, 80)
+    GrayAtmosphere.Decay = Color3.fromRGB(38, 38, 43)
+    GrayAtmosphere.Density = 0.5
     GrayAtmosphere.Glare = 0
     GrayAtmosphere.Haze = 0
     GrayAtmosphere.Parent = Lighting
+
+    if not State.bright then
+        change(Lighting, "ClockTime", 14)
+        change(Lighting, "Brightness", 0.7)
+        change(Lighting, "ExposureCompensation", -0.2)
+        change(Lighting, "Ambient", Color3.fromRGB(45, 45, 49))
+        change(Lighting, "OutdoorAmbient", Color3.fromRGB(30, 30, 34))
+        change(Lighting, "GlobalShadows", false)
+    end
+
+    pcall(function()
+        Workspace.Terrain.Decoration = false
+    end)
 end
 
 local function restoreSky()
@@ -457,7 +469,6 @@ local function makeLabel(text, size, pos, fontSize)
     label.Position = pos
     label.ZIndex = 3
     label.Parent = frame
-
     return label
 end
 
@@ -564,6 +575,7 @@ brightButton.MouseButton1Click:Connect(function()
     refreshButtons()
 end)
 
+-- Interaksi tetap manual, tombol hanya status
 interactButton.MouseButton1Click:Connect(function()
     State.interact = not State.interact
     refreshButtons()
