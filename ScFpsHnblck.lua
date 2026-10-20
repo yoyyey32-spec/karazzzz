@@ -13,6 +13,7 @@ local State = {
     fps = false,
     bright = false,
     interact = false,
+    noRecoil = false,
     visible = true
 }
 
@@ -38,14 +39,18 @@ end
 local function change(obj, prop, value)
     if not obj then return end
     remember(obj, prop)
-    pcall(function() obj[prop] = value end)
+    pcall(function()
+        obj[prop] = value
+    end)
 end
 
 local function restoreSaved()
     for obj, props in pairs(Saved) do
-        if obj and obj.Parent then
+        if obj then
             for prop, value in pairs(props) do
-                pcall(function() obj[prop] = value end)
+                pcall(function()
+                    obj[prop] = value
+                end)
             end
         end
     end
@@ -86,7 +91,8 @@ end
 
 local function isLaser(obj)
     return matches(obj, {
-        "laser", "tracer", "bullettrail", "bullet_trail", "muzzle"
+        "laser", "tracer", "bullettrail", "bullet_trail",
+        "bullet trail", "muzzle", "shootingeffect", "weaponfx"
     })
 end
 
@@ -115,21 +121,41 @@ local function isCarInterior(obj)
     })
 end
 
+local function isFaceTexture(obj)
+    if not (obj:IsA("Decal") or obj:IsA("Texture")) then
+        return false
+    end
+
+    local name = string.lower(obj.Name)
+    return name == "face"
+        or name == "face decal"
+        or name == "facetexture"
+end
+
 local function hideObject(obj)
     if obj:IsA("BasePart") then
         change(obj, "LocalTransparencyModifier", 1)
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
         change(obj, "Transparency", 1)
+    elseif obj:IsA("Beam") or obj:IsA("Trail")
+        or obj:IsA("ParticleEmitter") then
+        change(obj, "Enabled", false)
     end
 end
 
 local function optimize(obj)
     if not State.fps or not obj or not obj.Parent then return end
-    if protectedCharacter(obj) or obj:IsA("ProximityPrompt") then return end
-    if isLaser(obj) then return end
+    if obj:IsA("ProximityPrompt") then return end
 
-    if isLeaf(obj) or isFence(obj) or isGunStoreWood(obj)
-        or isCarInterior(obj) then
+    if isLaser(obj) then
+        hideObject(obj)
+        return
+    end
+
+    if protectedCharacter(obj) then return end
+
+    if isFaceTexture(obj) or isLeaf(obj) or isFence(obj)
+        or isGunStoreWood(obj) or isCarInterior(obj) then
         hideObject(obj)
         return
     end
@@ -151,26 +177,25 @@ local function optimize(obj)
         change(obj, "TextureId", "")
     elseif obj:IsA("SurfaceAppearance") then
         for _, prop in ipairs({
-            "ColorMap", "NormalMap", "RoughnessMap", "MetalnessMap"
+            "ColorMap", "NormalMap",
+            "RoughnessMap", "MetalnessMap"
         }) do
             change(obj, prop, "")
         end
     elseif obj:IsA("ParticleEmitter")
         or obj:IsA("Trail")
+        or obj:IsA("Beam")
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
-        or obj:IsA("Sparkles") then
-        change(obj, "Enabled", false)
-    elseif obj:IsA("BlurEffect") then
+        or obj:IsA("Sparkles")
+        or obj:IsA("BlurEffect") then
         change(obj, "Enabled", false)
     end
 
-    if matches(obj, {"blood", "bloodsplatter", "blood_splatter"})
-        and (obj:IsA("ParticleEmitter") or obj:IsA("Decal")
-        or obj:IsA("Texture")) then
+    if matches(obj, {"blood", "bloodsplatter", "blood_splatter"}) then
         if obj:IsA("ParticleEmitter") then
             change(obj, "Enabled", false)
-        else
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
             change(obj, "Transparency", 1)
         end
     end
@@ -203,7 +228,9 @@ end
 
 local function restoreBright()
     for prop, value in pairs(OriginalLighting) do
-        pcall(function() Lighting[prop] = value end)
+        pcall(function()
+            Lighting[prop] = value
+        end)
     end
 end
 
@@ -211,9 +238,11 @@ local function applyGraySky()
     for _, obj in ipairs(Lighting:GetChildren()) do
         if obj:IsA("Sky") then
             if OriginalSky[obj] == nil then
-                OriginalSky[obj] = true
+                OriginalSky[obj] = obj.Parent
             end
-            pcall(function() obj.Parent = nil end)
+            pcall(function()
+                obj.Parent = nil
+            end)
         end
     end
 
@@ -231,9 +260,11 @@ local function applyGraySky()
 end
 
 local function restoreSky()
-    for obj in pairs(OriginalSky) do
+    for obj, parent in pairs(OriginalSky) do
         if obj then
-            pcall(function() obj.Parent = Lighting end)
+            pcall(function()
+                obj.Parent = parent or Lighting
+            end)
         end
     end
     table.clear(OriginalSky)
@@ -281,7 +312,9 @@ end
 Workspace.DescendantAdded:Connect(function(obj)
     if State.fps then
         task.defer(function()
-            if obj and obj.Parent then optimize(obj) end
+            if State.fps and obj.Parent then
+                optimize(obj)
+            end
         end)
     end
 end)
@@ -305,7 +338,7 @@ gui.DisplayOrder = 999
 gui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(215, 205)
+frame.Size = UDim2.fromOffset(215, 235)
 frame.Position = UDim2.new(0, 18, 0, 100)
 frame.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
 frame.BorderSizePixel = 0
@@ -340,7 +373,10 @@ for i = 1, 17 do
     star.Position = UDim2.new(math.random(), 0, math.random(), 0)
     star.ZIndex = 1
     star.Parent = starLayer
-    table.insert(stars, {label = star, speed = 0.025 + math.random() * 0.06})
+    table.insert(stars, {
+        label = star,
+        speed = 0.025 + math.random() * 0.06
+    })
 end
 
 local function makeLabel(text, size, pos, fontSize)
@@ -402,8 +438,10 @@ end
 local fpsButton = makeButton("FPS BOOST: OFF", 53)
 local brightButton = makeButton("FULL BRIGHT: OFF", 85)
 local interactButton = makeButton("FAST INTERACT: OFF", 117)
+local recoilButton = makeButton("NO RECOIL: OFF", 149)
+
 makeLabel("RIGHT ALT = GUI",
-    UDim2.fromOffset(190, 18), UDim2.fromOffset(12, 155), 9)
+    UDim2.fromOffset(190, 18), UDim2.fromOffset(12, 187), 9)
 
 local function refreshButtons()
     fpsButton.Text = "FPS BOOST: " .. (State.fps and "ON" or "OFF")
@@ -420,6 +458,11 @@ local function refreshButtons()
     interactButton.BackgroundColor3 = State.interact
         and Color3.fromRGB(20, 75, 135)
         or Color3.fromRGB(22, 24, 33)
+
+    recoilButton.Text = "NO RECOIL: " .. (State.noRecoil and "ON" or "OFF")
+    recoilButton.BackgroundColor3 = State.noRecoil
+        and Color3.fromRGB(20, 75, 135)
+        or Color3.fromRGB(22, 24, 33)
 end
 
 fpsButton.MouseButton1Click:Connect(function()
@@ -430,12 +473,21 @@ end)
 
 brightButton.MouseButton1Click:Connect(function()
     State.bright = not State.bright
-    if State.bright then applyBright() else restoreBright() end
+    if State.bright then
+        applyBright()
+    else
+        restoreBright()
+    end
     refreshButtons()
 end)
 
 interactButton.MouseButton1Click:Connect(function()
     State.interact = not State.interact
+    refreshButtons()
+end)
+
+recoilButton.MouseButton1Click:Connect(function()
+    State.noRecoil = not State.noRecoil
     refreshButtons()
 end)
 
@@ -469,8 +521,10 @@ UIS.InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         frame.Position = UDim2.new(
-            startPosition.X.Scale, startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
         )
     end
 end)
@@ -486,8 +540,10 @@ RunService.RenderStepped:Connect(function(dt)
         local pos = item.label.Position
         local x = pos.X.Scale - item.speed * dt
         local y = pos.Y.Scale + item.speed * dt
+
         if x < -0.1 then x = 1.1 end
         if y > 1.1 then y = -0.1 end
+
         item.label.Position = UDim2.new(x, 0, y, 0)
     end
 end)
@@ -500,6 +556,7 @@ task.spawn(function()
             local network = Stats:FindFirstChild("Network")
             local serverStats = network and network:FindFirstChild("ServerStatsItem")
             local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+
             if dataPing then
                 ping = tostring(math.floor(dataPing:GetValue() + 0.5))
             end
