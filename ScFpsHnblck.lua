@@ -18,7 +18,7 @@ local State = {
     fps = false,
     bright = false,
     interact = false,
-    noRecoil = false,
+    noSpread = false,
     visible = true
 }
 
@@ -38,7 +38,9 @@ local function remember(obj, prop)
         return obj[prop]
     end)
 
-    if ok then Saved[obj][prop] = value end
+    if ok then
+        Saved[obj][prop] = value
+    end
 end
 
 local function change(obj, prop, value)
@@ -74,20 +76,25 @@ end
 
 local function matches(obj, words)
     local current = obj
+
     while current and current ~= Workspace do
         local name = string.lower(current.Name)
+
         for _, word in ipairs(words) do
             if string.find(name, word, 1, true) then
                 return true
             end
         end
+
         current = current.Parent
     end
+
     return false
 end
 
 local function protectedCharacter(obj)
     local current = obj
+
     while current and current ~= Workspace do
         if current:IsA("Model") then
             if Players:GetPlayerFromCharacter(current)
@@ -95,13 +102,17 @@ local function protectedCharacter(obj)
                 return true
             end
         end
+
         current = current.Parent
     end
+
     return false
 end
 
 local function isCar(obj)
-    return matches(obj, {"vehicle", "automobile", "carbody", "car_body"})
+    return matches(obj, {
+        "vehicle", "automobile", "carbody", "car_body"
+    })
 end
 
 local function isLaser(obj)
@@ -125,8 +136,11 @@ local function isFence(obj)
 end
 
 local function isGunStoreWood(obj)
-    return matches(obj, {"gunstore", "gun_store", "gun store"})
-        and matches(obj, {"wood", "wooden", "plank", "timber", "log"})
+    return matches(obj, {
+        "gunstore", "gun_store", "gun store"
+    }) and matches(obj, {
+        "wood", "wooden", "plank", "timber", "log"
+    })
 end
 
 local function isCarInterior(obj)
@@ -142,6 +156,7 @@ local function isFaceTexture(obj)
     end
 
     local name = string.lower(obj.Name)
+
     return name == "face"
         or name == "face decal"
         or name == "facetexture"
@@ -169,7 +184,9 @@ local function optimize(obj)
 
     if protectedCharacter(obj) then return end
 
-    if isFaceTexture(obj) or isLeaf(obj) or isFence(obj)
+    -- Pagar besi tetap ada.
+    -- Daun, tekstur muka, kayu tertentu dan interior mobil dikurangi.
+    if isFaceTexture(obj) or isLeaf(obj)
         or isGunStoreWood(obj) or isCarInterior(obj) then
         hideObject(obj)
         return
@@ -231,6 +248,7 @@ end
 
 local function applyBright()
     saveLighting()
+
     pcall(function()
         Lighting.Brightness = 3
         Lighting.ExposureCompensation = 0.5
@@ -255,6 +273,7 @@ local function applyGraySky()
             if OriginalSky[obj] == nil then
                 OriginalSky[obj] = obj.Parent
             end
+
             pcall(function()
                 obj.Parent = nil
             end)
@@ -282,6 +301,7 @@ local function restoreSky()
             end)
         end
     end
+
     table.clear(OriginalSky)
 
     if GrayAtmosphere then
@@ -351,13 +371,17 @@ end)
 Lighting.ChildAdded:Connect(function(obj)
     if State.fps and obj:IsA("Sky") then
         task.defer(function()
-            if State.fps then applyGraySky() end
+            if State.fps then
+                applyGraySky()
+            end
         end)
     end
 end)
 
 local oldGui = PlayerGui:FindFirstChild("SCFPS_FarhanStore")
-if oldGui then oldGui:Destroy() end
+if oldGui then
+    oldGui:Destroy()
+end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "SCFPS_FarhanStore"
@@ -391,6 +415,7 @@ starLayer.ZIndex = 1
 starLayer.Parent = frame
 
 local stars = {}
+
 for i = 1, 17 do
     local star = Instance.new("TextLabel")
     star.BackgroundTransparency = 1
@@ -402,6 +427,7 @@ for i = 1, 17 do
     star.Position = UDim2.new(math.random(), 0, math.random(), 0)
     star.ZIndex = 1
     star.Parent = starLayer
+
     table.insert(stars, {
         label = star,
         speed = 0.025 + math.random() * 0.06
@@ -431,11 +457,16 @@ local function makeLabel(text, size, pos, fontSize)
     label.Position = pos
     label.ZIndex = 3
     label.Parent = frame
+
     return label
 end
 
-makeLabel("SC FPS  |  FARHAN STORE",
-    UDim2.fromOffset(170, 22), UDim2.fromOffset(12, 7), 12)
+makeLabel(
+    "SC FPS  |  FARHAN STORE",
+    UDim2.fromOffset(170, 22),
+    UDim2.fromOffset(12, 7),
+    12
+)
 
 local close = Instance.new("TextButton")
 close.Text = "X"
@@ -449,8 +480,12 @@ close.Position = UDim2.new(1, -30, 0, 5)
 close.ZIndex = 4
 close.Parent = frame
 
-local pingLabel = makeLabel("PING: -- ms",
-    UDim2.fromOffset(180, 18), UDim2.fromOffset(12, 30), 10)
+local pingLabel = makeLabel(
+    "PING: -- ms",
+    UDim2.fromOffset(180, 18),
+    UDim2.fromOffset(12, 30),
+    10
+)
 
 local function makeButton(text, y)
     local button = Instance.new("TextButton")
@@ -480,10 +515,14 @@ end
 local fpsButton = makeButton("FPS BOOST: OFF", 53)
 local brightButton = makeButton("FULL BRIGHT: OFF", 85)
 local interactButton = makeButton("FAST INTERACT: OFF", 117)
-local recoilButton = makeButton("NO RECOIL: OFF", 149)
+local spreadButton = makeButton("NO SPREAD: OFF", 149)
 
-makeLabel("RIGHT ALT = GUI",
-    UDim2.fromOffset(190, 18), UDim2.fromOffset(12, 187), 9)
+makeLabel(
+    "RIGHT ALT = GUI",
+    UDim2.fromOffset(190, 18),
+    UDim2.fromOffset(12, 187),
+    9
+)
 
 local function refreshButtons()
     fpsButton.Text = "FPS BOOST: " .. (State.fps and "ON" or "OFF")
@@ -501,8 +540,8 @@ local function refreshButtons()
         and Color3.fromRGB(20, 75, 135)
         or Color3.fromRGB(22, 24, 33)
 
-    recoilButton.Text = "NO RECOIL: " .. (State.noRecoil and "ON" or "OFF")
-    recoilButton.BackgroundColor3 = State.noRecoil
+    spreadButton.Text = "NO SPREAD: " .. (State.noSpread and "ON" or "OFF")
+    spreadButton.BackgroundColor3 = State.noSpread
         and Color3.fromRGB(20, 75, 135)
         or Color3.fromRGB(22, 24, 33)
 end
@@ -515,11 +554,13 @@ end)
 
 brightButton.MouseButton1Click:Connect(function()
     State.bright = not State.bright
+
     if State.bright then
         applyBright()
     else
         restoreBright()
     end
+
     refreshButtons()
 end)
 
@@ -528,8 +569,8 @@ interactButton.MouseButton1Click:Connect(function()
     refreshButtons()
 end)
 
-recoilButton.MouseButton1Click:Connect(function()
-    State.noRecoil = not State.noRecoil
+spreadButton.MouseButton1Click:Connect(function()
+    State.noSpread = not State.noSpread
     refreshButtons()
 end)
 
@@ -540,6 +581,7 @@ end)
 
 UIS.InputBegan:Connect(function(input, processed)
     if processed then return end
+
     if input.KeyCode == Enum.KeyCode.RightAlt then
         State.visible = not State.visible
         frame.Visible = State.visible
@@ -562,6 +604,7 @@ end)
 UIS.InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
+
         frame.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
@@ -596,8 +639,10 @@ task.spawn(function()
 
         pcall(function()
             local network = Stats:FindFirstChild("Network")
-            local serverStats = network and network:FindFirstChild("ServerStatsItem")
-            local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+            local serverStats = network
+                and network:FindFirstChild("ServerStatsItem")
+            local dataPing = serverStats
+                and serverStats:FindFirstChild("Data Ping")
 
             if dataPing then
                 ping = tostring(math.floor(dataPing:GetValue() + 0.5))
