@@ -12,17 +12,19 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 local State = {
     fps = false,
     bright = false,
+    interact = false,
     visible = true
 }
 
 local Saved = setmetatable({}, {__mode = "k"})
-local SkySaved = {}
-local Busy = false
 local OriginalLighting = {}
+local OriginalSky = {}
+local OriginalDecoration
+local GrayAtmosphere
+local Busy = false
 
 local function remember(obj, prop)
     if not obj then return end
-
     Saved[obj] = Saved[obj] or {}
     if Saved[obj][prop] ~= nil then return end
 
@@ -30,190 +32,106 @@ local function remember(obj, prop)
         return obj[prop]
     end)
 
-    if ok then
-        Saved[obj][prop] = value
-    end
+    if ok then Saved[obj][prop] = value end
 end
 
 local function change(obj, prop, value)
     if not obj then return end
     remember(obj, prop)
-
-    pcall(function()
-        obj[prop] = value
-    end)
-end
-
-local function restoreObject(obj, props)
-    if not props then return end
-
-    for prop, value in pairs(props) do
-        pcall(function()
-            obj[prop] = value
-        end)
-    end
+    pcall(function() obj[prop] = value end)
 end
 
 local function restoreSaved()
     for obj, props in pairs(Saved) do
         if obj and obj.Parent then
-            restoreObject(obj, props)
+            for prop, value in pairs(props) do
+                pcall(function() obj[prop] = value end)
+            end
         end
     end
     table.clear(Saved)
 end
 
-local function nameMatches(obj, words)
+local function matches(obj, words)
     local current = obj
-
     while current and current ~= Workspace do
         local name = string.lower(current.Name)
-
         for _, word in ipairs(words) do
             if string.find(name, word, 1, true) then
                 return true
             end
         end
-
         current = current.Parent
     end
-
     return false
 end
 
-local function isCharacterPart(obj)
+local function protectedCharacter(obj)
     local current = obj
-
     while current and current ~= Workspace do
         if current:IsA("Model") then
-            if Players:GetPlayerFromCharacter(current) then
-                return true
-            end
-
-            if current:FindFirstChildOfClass("Humanoid") then
+            if Players:GetPlayerFromCharacter(current)
+                or current:FindFirstChildOfClass("Humanoid") then
                 return true
             end
         end
-
         current = current.Parent
     end
-
     return false
 end
 
 local function isCar(obj)
-    return nameMatches(obj, {
-        "vehicle", "automobile", "carbody", "car_body"
-    })
-end
-
-local function isGun(obj)
-    return nameMatches(obj, {
-        "gun", "weapon", "pistol", "rifle",
-        "shotgun", "smg", "revolver"
-    })
+    return matches(obj, {"vehicle", "automobile", "carbody", "car_body"})
 end
 
 local function isLaser(obj)
-    return nameMatches(obj, {
-        "laser", "tracer", "bullettrail", "bullet_trail",
-        "muzzle", "beam"
+    return matches(obj, {
+        "laser", "tracer", "bullettrail", "bullet_trail", "muzzle"
     })
 end
 
 local function isLeaf(obj)
-    return nameMatches(obj, {
+    return matches(obj, {
         "foliage", "leaves", "leaf", "treeleaves",
         "treetop", "canopy", "bush"
     })
 end
 
-local function isGunStoreWood(obj)
-    return nameMatches(obj, {
-        "gunstore", "gun_store", "gun store"
-    }) and nameMatches(obj, {
-        "wood", "wooden", "plank", "timber", "log"
+local function isFence(obj)
+    return matches(obj, {
+        "fence", "fencing", "railing", "barbedwire"
     })
 end
 
+local function isGunStoreWood(obj)
+    return matches(obj, {"gunstore", "gun_store", "gun store"})
+        and matches(obj, {"wood", "wooden", "plank", "timber", "log"})
+end
+
 local function isCarInterior(obj)
-    return isCar(obj) and nameMatches(obj, {
+    return isCar(obj) and matches(obj, {
         "interior", "dashboard", "seatinside",
         "carseat", "steeringwheel", "car_interior"
     })
 end
 
-local function stripTexture(obj)
-    if obj:IsA("Decal") or obj:IsA("Texture") then
-        if not isLaser(obj) then
-            change(obj, "Transparency", 1)
-        end
-
-    elseif obj:IsA("SurfaceAppearance") then
-        for _, prop in ipairs({
-            "ColorMap", "NormalMap", "RoughnessMap", "MetalnessMap"
-        }) do
-            change(obj, prop, "")
-        end
-
-    elseif obj:IsA("SpecialMesh") then
-        change(obj, "TextureId", "")
-
-    elseif obj:IsA("MeshPart") then
-        change(obj, "TextureID", "")
-        change(obj, "Reflectance", 0)
-
-    elseif obj:IsA("BasePart") then
-        change(obj, "Reflectance", 0)
-    end
-end
-
-local function makeGunBlack(obj)
+local function hideObject(obj)
     if obj:IsA("BasePart") then
-        change(obj, "Color", Color3.new(0, 0, 0))
-        change(obj, "Material", Enum.Material.SmoothPlastic)
-        change(obj, "Reflectance", 0)
+        change(obj, "LocalTransparencyModifier", 1)
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        change(obj, "Transparency", 1)
     end
 end
 
 local function optimize(obj)
     if not State.fps or not obj or not obj.Parent then return end
-    if isCharacterPart(obj) then return end
-    if obj:IsA("ProximityPrompt") then return end
+    if protectedCharacter(obj) or obj:IsA("ProximityPrompt") then return end
+    if isLaser(obj) then return end
 
-    if isLaser(obj) then
+    if isLeaf(obj) or isFence(obj) or isGunStoreWood(obj)
+        or isCarInterior(obj) then
+        hideObject(obj)
         return
-    end
-
-    if isLeaf(obj) then
-        if obj:IsA("BasePart") then
-            change(obj, "LocalTransparencyModifier", 1)
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            change(obj, "Transparency", 1)
-        end
-        return
-    end
-
-    if isGunStoreWood(obj) then
-        if obj:IsA("BasePart") then
-            change(obj, "LocalTransparencyModifier", 1)
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            change(obj, "Transparency", 1)
-        end
-        return
-    end
-
-    if isCarInterior(obj) then
-        if obj:IsA("BasePart") then
-            change(obj, "LocalTransparencyModifier", 1)
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            change(obj, "Transparency", 1)
-        end
-        return
-    end
-
-    if isGun(obj) then
-        makeGunBlack(obj)
     end
 
     if obj:IsA("BasePart") then
@@ -225,44 +143,56 @@ local function optimize(obj)
         end
     end
 
-    if not isCar(obj) then
-        stripTexture(obj)
-    end
-
-    if obj:IsA("ParticleEmitter")
+    if obj:IsA("Decal") or obj:IsA("Texture") then
+        change(obj, "Transparency", 1)
+    elseif obj:IsA("MeshPart") then
+        change(obj, "TextureID", "")
+    elseif obj:IsA("SpecialMesh") then
+        change(obj, "TextureId", "")
+    elseif obj:IsA("SurfaceAppearance") then
+        for _, prop in ipairs({
+            "ColorMap", "NormalMap", "RoughnessMap", "MetalnessMap"
+        }) do
+            change(obj, prop, "")
+        end
+    elseif obj:IsA("ParticleEmitter")
         or obj:IsA("Trail")
-        or obj:IsA("Beam")
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
         or obj:IsA("Sparkles") then
-
         change(obj, "Enabled", false)
-
-    elseif obj:IsA("PostEffect") then
+    elseif obj:IsA("BlurEffect") then
         change(obj, "Enabled", false)
+    end
+
+    if matches(obj, {"blood", "bloodsplatter", "blood_splatter"})
+        and (obj:IsA("ParticleEmitter") or obj:IsA("Decal")
+        or obj:IsA("Texture")) then
+        if obj:IsA("ParticleEmitter") then
+            change(obj, "Enabled", false)
+        else
+            change(obj, "Transparency", 1)
+        end
     end
 end
 
 local function saveLighting()
-    if next(OriginalLighting) then return end
-
     for _, prop in ipairs({
         "Brightness", "ClockTime", "ExposureCompensation",
-        "GlobalShadows", "FogEnd", "Ambient",
-        "OutdoorAmbient"
+        "GlobalShadows", "FogEnd", "Ambient", "OutdoorAmbient"
     }) do
-        pcall(function()
-            OriginalLighting[prop] = Lighting[prop]
-        end)
+        if OriginalLighting[prop] == nil then
+            pcall(function()
+                OriginalLighting[prop] = Lighting[prop]
+            end)
+        end
     end
 end
 
 local function applyBright()
     saveLighting()
-
     pcall(function()
         Lighting.Brightness = 3
-        Lighting.ClockTime = 14
         Lighting.ExposureCompensation = 0.5
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 100000
@@ -273,53 +203,44 @@ end
 
 local function restoreBright()
     for prop, value in pairs(OriginalLighting) do
-        pcall(function()
-            Lighting[prop] = value
-        end)
+        pcall(function() Lighting[prop] = value end)
     end
 end
 
-local function graySky()
+local function applyGraySky()
     for _, obj in ipairs(Lighting:GetChildren()) do
         if obj:IsA("Sky") then
-            if SkySaved[obj] == nil then
-                SkySaved[obj] = obj.Parent
+            if OriginalSky[obj] == nil then
+                OriginalSky[obj] = true
             end
-            pcall(function()
-                obj.Parent = nil
-            end)
+            pcall(function() obj.Parent = nil end)
         end
     end
 
-    local atmosphere = Lighting:FindFirstChild("SCFPS_GrayAtmosphere")
-
-    if not atmosphere then
-        atmosphere = Instance.new("Atmosphere")
-        atmosphere.Name = "SCFPS_GrayAtmosphere"
-        atmosphere.Parent = Lighting
+    if not GrayAtmosphere then
+        GrayAtmosphere = Instance.new("Atmosphere")
+        GrayAtmosphere.Name = "SCFPS_GrayAtmosphere"
     end
 
-    atmosphere.Color = Color3.fromRGB(150, 150, 150)
-    atmosphere.Decay = Color3.fromRGB(95, 95, 95)
-    atmosphere.Density = 0.25
-    atmosphere.Glare = 0
-    atmosphere.Haze = 0
+    GrayAtmosphere.Color = Color3.fromRGB(145, 145, 145)
+    GrayAtmosphere.Decay = Color3.fromRGB(90, 90, 90)
+    GrayAtmosphere.Density = 0.3
+    GrayAtmosphere.Glare = 0
+    GrayAtmosphere.Haze = 0
+    GrayAtmosphere.Parent = Lighting
 end
 
 local function restoreSky()
-    for obj, parent in pairs(SkySaved) do
+    for obj in pairs(OriginalSky) do
         if obj then
-            pcall(function()
-                obj.Parent = parent
-            end)
+            pcall(function() obj.Parent = Lighting end)
         end
     end
+    table.clear(OriginalSky)
 
-    table.clear(SkySaved)
-
-    local atmosphere = Lighting:FindFirstChild("SCFPS_GrayAtmosphere")
-    if atmosphere then
-        atmosphere:Destroy()
+    if GrayAtmosphere then
+        GrayAtmosphere:Destroy()
+        GrayAtmosphere = nil
     end
 end
 
@@ -328,7 +249,13 @@ local function applyFPS()
     Busy = true
 
     if State.fps then
-        graySky()
+        if OriginalDecoration == nil then
+            pcall(function()
+                OriginalDecoration = Workspace.Terrain.Decoration
+            end)
+        end
+
+        applyGraySky()
 
         pcall(function()
             Workspace.Terrain.Decoration = false
@@ -341,9 +268,11 @@ local function applyFPS()
         restoreSaved()
         restoreSky()
 
-        pcall(function()
-            Workspace.Terrain.Decoration = true
-        end)
+        if OriginalDecoration ~= nil then
+            pcall(function()
+                Workspace.Terrain.Decoration = OriginalDecoration
+            end)
+        end
     end
 
     Busy = false
@@ -352,18 +281,21 @@ end
 Workspace.DescendantAdded:Connect(function(obj)
     if State.fps then
         task.defer(function()
-            if obj and obj.Parent then
-                optimize(obj)
-            end
+            if obj and obj.Parent then optimize(obj) end
         end)
     end
 end)
 
 Lighting.ChildAdded:Connect(function(obj)
     if State.fps and obj:IsA("Sky") then
-        task.defer(graySky)
+        task.defer(function()
+            if State.fps then applyGraySky() end
+        end)
     end
 end)
+
+local oldGui = PlayerGui:FindFirstChild("SCFPS_FarhanStore")
+if oldGui then oldGui:Destroy() end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "SCFPS_FarhanStore"
@@ -373,8 +305,7 @@ gui.DisplayOrder = 999
 gui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Name = "Main"
-frame.Size = UDim2.fromOffset(215, 169)
+frame.Size = UDim2.fromOffset(215, 205)
 frame.Position = UDim2.new(0, 18, 0, 100)
 frame.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
 frame.BorderSizePixel = 0
@@ -390,7 +321,6 @@ stroke.Thickness = 1.4
 stroke.Parent = frame
 
 local starLayer = Instance.new("Frame")
-starLayer.Name = "Stars"
 starLayer.BackgroundTransparency = 1
 starLayer.ClipsDescendants = true
 starLayer.Size = UDim2.new(1, -8, 1, -8)
@@ -399,23 +329,18 @@ starLayer.ZIndex = 1
 starLayer.Parent = frame
 
 local stars = {}
-
 for i = 1, 17 do
     local star = Instance.new("TextLabel")
     star.BackgroundTransparency = 1
     star.Text = "✦"
     star.TextColor3 = Color3.fromRGB(55, 115, 210)
-    star.TextTransparency = 0.25 + math.random() * 0.5
+    star.TextTransparency = 0.4
     star.TextSize = math.random(7, 12)
     star.Size = UDim2.fromOffset(14, 14)
     star.Position = UDim2.new(math.random(), 0, math.random(), 0)
     star.ZIndex = 1
     star.Parent = starLayer
-
-    table.insert(stars, {
-        label = star,
-        speed = 0.025 + math.random() * 0.06
-    })
+    table.insert(stars, {label = star, speed = 0.025 + math.random() * 0.06})
 end
 
 local function makeLabel(text, size, pos, fontSize)
@@ -452,7 +377,7 @@ local pingLabel = makeLabel("PING: -- ms",
 
 local function makeButton(text, y)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.fromOffset(191, 29)
+    button.Size = UDim2.fromOffset(191, 27)
     button.Position = UDim2.fromOffset(12, y)
     button.BackgroundColor3 = Color3.fromRGB(22, 24, 33)
     button.BorderSizePixel = 0
@@ -460,26 +385,25 @@ local function makeButton(text, y)
     button.TextColor3 = Color3.fromRGB(225, 230, 245)
     button.TextSize = 11
     button.Font = Enum.Font.GothamSemibold
-    button.AutoButtonColor = true
     button.ZIndex = 3
     button.Parent = frame
 
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 5)
-    buttonCorner.Parent = button
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = button
 
-    local buttonStroke = Instance.new("UIStroke")
-    buttonStroke.Color = Color3.fromRGB(45, 70, 105)
-    buttonStroke.Thickness = 1
-    buttonStroke.Parent = button
+    local s = Instance.new("UIStroke")
+    s.Color = Color3.fromRGB(45, 70, 105)
+    s.Parent = button
 
     return button
 end
 
 local fpsButton = makeButton("FPS BOOST: OFF", 53)
-local brightButton = makeButton("FULL BRIGHT: OFF", 88)
-local infoLabel = makeLabel("RIGHT ALT = GUI",
-    UDim2.fromOffset(190, 18), UDim2.fromOffset(12, 129), 9)
+local brightButton = makeButton("FULL BRIGHT: OFF", 85)
+local interactButton = makeButton("FAST INTERACT: OFF", 117)
+makeLabel("RIGHT ALT = GUI",
+    UDim2.fromOffset(190, 18), UDim2.fromOffset(12, 155), 9)
 
 local function refreshButtons()
     fpsButton.Text = "FPS BOOST: " .. (State.fps and "ON" or "OFF")
@@ -489,6 +413,11 @@ local function refreshButtons()
 
     brightButton.Text = "FULL BRIGHT: " .. (State.bright and "ON" or "OFF")
     brightButton.BackgroundColor3 = State.bright
+        and Color3.fromRGB(20, 75, 135)
+        or Color3.fromRGB(22, 24, 33)
+
+    interactButton.Text = "FAST INTERACT: " .. (State.interact and "ON" or "OFF")
+    interactButton.BackgroundColor3 = State.interact
         and Color3.fromRGB(20, 75, 135)
         or Color3.fromRGB(22, 24, 33)
 end
@@ -501,13 +430,12 @@ end)
 
 brightButton.MouseButton1Click:Connect(function()
     State.bright = not State.bright
+    if State.bright then applyBright() else restoreBright() end
+    refreshButtons()
+end)
 
-    if State.bright then
-        applyBright()
-    else
-        restoreBright()
-    end
-
+interactButton.MouseButton1Click:Connect(function()
+    State.interact = not State.interact
     refreshButtons()
 end)
 
@@ -518,7 +446,6 @@ end)
 
 UIS.InputBegan:Connect(function(input, processed)
     if processed then return end
-
     if input.KeyCode == Enum.KeyCode.RightAlt then
         State.visible = not State.visible
         frame.Visible = State.visible
@@ -530,15 +457,11 @@ local dragStart
 local startPosition
 
 frame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local mouseY = input.Position.Y
-        local frameTop = frame.AbsolutePosition.Y
-
-        if mouseY <= frameTop + 27 then
-            dragging = true
-            dragStart = input.Position
-            startPosition = frame.Position
-        end
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        and input.Position.Y <= frame.AbsolutePosition.Y + 27 then
+        dragging = true
+        dragStart = input.Position
+        startPosition = frame.Position
     end
 end)
 
@@ -546,10 +469,8 @@ UIS.InputChanged:Connect(function(input)
     if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         frame.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
+            startPosition.X.Scale, startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
         )
     end
 end)
@@ -565,10 +486,8 @@ RunService.RenderStepped:Connect(function(dt)
         local pos = item.label.Position
         local x = pos.X.Scale - item.speed * dt
         local y = pos.Y.Scale + item.speed * dt
-
         if x < -0.1 then x = 1.1 end
         if y > 1.1 then y = -0.1 end
-
         item.label.Position = UDim2.new(x, 0, y, 0)
     end
 end)
@@ -581,7 +500,6 @@ task.spawn(function()
             local network = Stats:FindFirstChild("Network")
             local serverStats = network and network:FindFirstChild("ServerStatsItem")
             local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
-
             if dataPing then
                 ping = tostring(math.floor(dataPing:GetValue() + 0.5))
             end
