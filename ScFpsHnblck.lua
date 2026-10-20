@@ -9,6 +9,11 @@ local Stats = game:GetService("Stats")
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
+local SCFont
+pcall(function()
+    SCFont = Font.fromId(12187372382)
+end)
+
 local State = {
     fps = false,
     bright = false,
@@ -55,6 +60,16 @@ local function restoreSaved()
         end
     end
     table.clear(Saved)
+end
+
+local function applyFont(obj)
+    if not State.fps or not SCFont or not obj then return end
+
+    if obj:IsA("TextLabel")
+        or obj:IsA("TextButton")
+        or obj:IsA("TextBox") then
+        change(obj, "FontFace", SCFont)
+    end
 end
 
 local function matches(obj, words)
@@ -295,6 +310,10 @@ local function applyFPS()
         for _, obj in ipairs(Workspace:GetDescendants()) do
             optimize(obj)
         end
+
+        for _, obj in ipairs(PlayerGui:GetDescendants()) do
+            applyFont(obj)
+        end
     else
         restoreSaved()
         restoreSky()
@@ -314,6 +333,16 @@ Workspace.DescendantAdded:Connect(function(obj)
         task.defer(function()
             if State.fps and obj.Parent then
                 optimize(obj)
+            end
+        end)
+    end
+end)
+
+PlayerGui.DescendantAdded:Connect(function(obj)
+    if State.fps then
+        task.defer(function()
+            if State.fps and obj.Parent then
+                applyFont(obj)
             end
         end)
     end
@@ -379,12 +408,23 @@ for i = 1, 17 do
     })
 end
 
+local function setFont(obj)
+    if SCFont then
+        pcall(function()
+            obj.FontFace = SCFont
+        end)
+    else
+        obj.Font = Enum.Font.GothamSemibold
+    end
+end
+
 local function makeLabel(text, size, pos, fontSize)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Text = text
     label.TextColor3 = Color3.fromRGB(235, 240, 255)
     label.Font = Enum.Font.GothamSemibold
+    setFont(label)
     label.TextSize = fontSize or 12
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Size = size
@@ -400,6 +440,7 @@ makeLabel("SC FPS  |  FARHAN STORE",
 local close = Instance.new("TextButton")
 close.Text = "X"
 close.Font = Enum.Font.GothamBold
+setFont(close)
 close.TextSize = 12
 close.TextColor3 = Color3.fromRGB(255, 100, 100)
 close.BackgroundTransparency = 1
@@ -421,6 +462,7 @@ local function makeButton(text, y)
     button.TextColor3 = Color3.fromRGB(225, 230, 245)
     button.TextSize = 11
     button.Font = Enum.Font.GothamSemibold
+    setFont(button)
     button.ZIndex = 3
     button.Parent = frame
 
