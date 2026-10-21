@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
@@ -1184,4 +1183,4 @@ end
 ENV.SCFPS_Cleanup = cleanup
 
 refresh()
-print("SC FPS | FARHAN STORE - ULTRA POTATO V3.1")
+print("SC FPS | FARHAN STORE ")
