@@ -34,12 +34,13 @@ local SkySaved = {}
 local PromptSaved = {}
 local RecoilSaved = {}
 local SpreadSaved = {}
-local BrightSaved = nil
-local DecorationSaved = nil
-local QualitySaved = nil
+
+local BrightSaved
+local QualitySaved
+local DecorationSaved
 
 local BlackSky
-local BlackAtmosphere
+local GrayAtmosphere
 local Gui
 local Main
 local Buttons = {}
@@ -67,9 +68,9 @@ pcall(function()
 end)
 
 local function bind(signal, callback)
-    local c = signal:Connect(callback)
-    table.insert(Connections, c)
-    return c
+    local connection = signal:Connect(callback)
+    table.insert(Connections, connection)
+    return connection
 end
 
 local function set(obj, prop, value)
@@ -81,9 +82,7 @@ local function set(obj, prop, value)
 
     if not ok then return end
 
-    if not VisualSaved[obj] then
-        VisualSaved[obj] = {}
-    end
+    VisualSaved[obj] = VisualSaved[obj] or {}
 
     if VisualSaved[obj][prop] == nil then
         VisualSaved[obj][prop] = old
@@ -168,10 +167,11 @@ local function getTool(obj)
 end
 
 local function ownCharacter(obj)
-    local char = Player.Character
+    local character = Player.Character
 
-    return char and (
-        obj == char or obj:IsDescendantOf(char)
+    return character and (
+        obj == character
+        or obj:IsDescendantOf(character)
     )
 end
 
@@ -179,7 +179,7 @@ local function isFence(obj)
     return ancestorHas(obj, {
         "fence", "chainlink", "chain_link",
         "railing", "ironfence", "metal_fence",
-        "grate"
+        "grate", "wirefence"
     }, 6)
 end
 
@@ -205,14 +205,14 @@ end
 
 local function isFlash(obj)
     return ancestorHas(obj, {
-        "muzzle", "flash", "gunfire",
-        "gun_fire", "gunshot", "gun_shot",
-        "barrelfx", "barrel_fx", "shootfx",
-        "shoot_fx", "fireeffect", "fire_effect",
-        "tracer", "bullettrail", "bullet_trail",
-        "bulletbeam", "bullet_beam",
-        "gunsmoke", "gun_smoke",
-        "shellparticle", "laser",
+        "muzzle", "gunflash", "gun_flash",
+        "gunfire", "gun_fire", "gunshot",
+        "gun_shot", "barrelfx", "barrel_fx",
+        "shootfx", "shoot_fx", "fireeffect",
+        "fire_effect", "tracer", "bullettrail",
+        "bullet_trail", "bulletbeam",
+        "bullet_beam", "gunsmoke",
+        "gun_smoke", "shellparticle",
         "bulletfx", "bullet_fx",
         "impactfx", "impact_fx"
     }, 5)
@@ -240,16 +240,18 @@ local function isLight(obj)
         or obj:IsA("SurfaceLight")
 end
 
-local function disableEffect(obj)
+local function disableFX(obj)
     if isEffect(obj) or isLight(obj) then
         set(obj, "Enabled", false)
 
+        if obj:IsA("ParticleEmitter") then
+            pcall(function()
+                obj:Clear()
+            end)
+        end
+
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
         set(obj, "Transparency", 1)
-
-    elseif obj:IsA("BasePart") then
-        set(obj, "Transparency", 1)
-        set(obj, "CastShadow", false)
     end
 end
 
@@ -268,26 +270,6 @@ local function stripTexture(obj)
     end
 end
 
-local function isStoreWood(obj)
-    if not obj:IsA("BasePart") then return false end
-    if isWeapon(obj) or isFence(obj) then return false end
-
-    if not ancestorHas(obj, {
-        "gunstore", "gun_store", "gun store",
-        "gunshop", "gun_shop", "weaponshop",
-        "weapon_shop"
-    }, 10) then
-        return false
-    end
-
-    return obj.Material == Enum.Material.Wood
-        or obj.Material == Enum.Material.WoodPlanks
-        or hasName(obj, {
-            "wood", "plank", "timber",
-            "shelf", "counter", "board"
-        })
-end
-
 local function potatoPart(obj, weapon)
     if not obj:IsA("BasePart") then return end
 
@@ -296,18 +278,18 @@ local function potatoPart(obj, weapon)
     set(obj, "Material", Enum.Material.SmoothPlastic)
 
     if weapon then
-        set(obj, "Color", Color3.fromRGB(8, 8, 8))
+        set(obj, "Color", Color3.fromRGB(12, 12, 12))
     else
         local c = obj.Color
 
         local gray = (
-            c.R * 0.299 +
-            c.G * 0.587 +
-            c.B * 0.114
+            c.R * 0.299
+            + c.G * 0.587
+            + c.B * 0.114
         ) * 255
 
         gray = math.floor(gray / 64) * 64
-        gray = math.clamp(gray, 32, 160)
+        gray = math.clamp(gray, 48, 176)
 
         set(obj, "Color", Color3.fromRGB(
             gray, gray, gray
@@ -316,6 +298,10 @@ local function potatoPart(obj, weapon)
 
     if obj:IsA("MeshPart") then
         set(obj, "TextureID", "")
+
+        pcall(function()
+            set(obj, "RenderFidelity", Enum.RenderFidelity.Performance)
+        end)
     end
 end
 
@@ -332,26 +318,24 @@ local function optimize(obj)
     local tool = getTool(obj)
 
     if isFlash(obj) or isBlood(obj) then
-        disableEffect(obj)
-        return
+        if isEffect(obj) or isLight(obj)
+            or obj:IsA("Decal")
+            or obj:IsA("Texture") then
+            disableFX(obj)
+            return
+        end
     end
 
     if tool then
         if isEffect(obj) or isLight(obj) then
-            disableEffect(obj)
-            return
-        end
-
-        if obj:IsA("SurfaceAppearance")
-            or obj:IsA("SpecialMesh")
-            or obj:IsA("Decal")
-            or obj:IsA("Texture") then
-            stripTexture(obj)
+            disableFX(obj)
             return
         end
 
         if obj:IsA("BasePart") then
             potatoPart(obj, true)
+        else
+            stripTexture(obj)
         end
 
         return
@@ -359,8 +343,9 @@ local function optimize(obj)
 
     if ownCharacter(obj) then
         if isEffect(obj) then
-            disableEffect(obj)
+            disableFX(obj)
         end
+
         return
     end
 
@@ -369,17 +354,12 @@ local function optimize(obj)
             set(obj, "CastShadow", false)
             set(obj, "Reflectance", 0)
         end
-        return
-    end
 
-    if isStoreWood(obj) then
-        set(obj, "Transparency", 1)
-        set(obj, "CastShadow", false)
         return
     end
 
     if isEffect(obj) then
-        disableEffect(obj)
+        disableFX(obj)
         return
     end
 
@@ -393,9 +373,9 @@ local function optimize(obj)
         if isVehicle(obj) then
             set(obj, "CastShadow", false)
         end
+    else
+        stripTexture(obj)
     end
-
-    stripTexture(obj)
 end
 
 local function optimizeLighting()
@@ -403,6 +383,17 @@ local function optimizeLighting()
     set(Lighting, "EnvironmentDiffuseScale", 0)
     set(Lighting, "EnvironmentSpecularScale", 0)
     set(Lighting, "ShadowSoftness", 0)
+
+    set(Lighting, "Ambient", Color3.fromRGB(135, 135, 135))
+    set(Lighting, "OutdoorAmbient", Color3.fromRGB(145, 145, 145))
+
+    set(Lighting, "Brightness", math.max(
+        Lighting.Brightness, 2
+    ))
+
+    set(Lighting, "ExposureCompensation", 0)
+
+    set(Lighting, "FogEnd", 100000)
 end
 
 local function optimizeTerrain()
@@ -414,13 +405,9 @@ local function optimizeTerrain()
     set(Terrain, "WaterTransparency", 1)
 
     if DecorationSaved == nil then
-        local ok, value = pcall(function()
-            return Terrain.Decoration
+        pcall(function()
+            DecorationSaved = Terrain.Decoration
         end)
-
-        if ok then
-            DecorationSaved = value
-        end
     end
 
     pcall(function()
@@ -434,10 +421,9 @@ local function optimizeTerrain()
     end
 end
 
-local function setLowQuality()
+local function lowQuality()
     pcall(function()
-        local settingsObject = settings()
-        local rendering = settingsObject.Rendering
+        local rendering = settings().Rendering
 
         if QualitySaved == nil then
             QualitySaved = rendering.QualityLevel
@@ -448,18 +434,18 @@ local function setLowQuality()
 end
 
 local function restoreQuality()
-    if QualitySaved ~= nil then
-        pcall(function()
-            settings().Rendering.QualityLevel = QualitySaved
-        end)
+    if QualitySaved == nil then return end
 
-        QualitySaved = nil
-    end
+    pcall(function()
+        settings().Rendering.QualityLevel = QualitySaved
+    end)
+
+    QualitySaved = nil
 end
 
-local function blackSky()
+local function applySky()
     for _, obj in ipairs(Lighting:GetChildren()) do
-        if obj ~= BlackSky and obj ~= BlackAtmosphere then
+        if obj ~= BlackSky and obj ~= GrayAtmosphere then
             if obj:IsA("Sky") or obj:IsA("Atmosphere") then
                 if SkySaved[obj] == nil then
                     SkySaved[obj] = obj.Parent
@@ -475,7 +461,7 @@ local function blackSky()
 
     if not BlackSky then
         BlackSky = Instance.new("Sky")
-        BlackSky.Name = "SCFPS_BlackSky"
+        BlackSky.Name = "SCFPS_DarkSky"
     end
 
     BlackSky.CelestialBodiesShown = false
@@ -484,17 +470,19 @@ local function blackSky()
     BlackSky.MoonAngularSize = 0
     BlackSky.Parent = Lighting
 
-    if not BlackAtmosphere then
-        BlackAtmosphere = Instance.new("Atmosphere")
-        BlackAtmosphere.Name = "SCFPS_BlackAtmosphere"
+    if not GrayAtmosphere then
+        GrayAtmosphere = Instance.new("Atmosphere")
+        GrayAtmosphere.Name = "SCFPS_GrayAtmosphere"
     end
 
-    BlackAtmosphere.Color = Color3.new(0, 0, 0)
-    BlackAtmosphere.Decay = Color3.new(0, 0, 0)
-    BlackAtmosphere.Density = 1
-    BlackAtmosphere.Haze = 10
-    BlackAtmosphere.Glare = 0
-    BlackAtmosphere.Parent = Lighting
+    GrayAtmosphere.Color = Color3.fromRGB(70, 70, 70)
+    GrayAtmosphere.Decay = Color3.fromRGB(70, 70, 70)
+    GrayAtmosphere.Density = 0.12
+    GrayAtmosphere.Haze = 0
+    GrayAtmosphere.Glare = 0
+    GrayAtmosphere.Offset = 0
+
+    GrayAtmosphere.Parent = Lighting
 end
 
 local function restoreSky()
@@ -503,9 +491,9 @@ local function restoreSky()
         BlackSky = nil
     end
 
-    if BlackAtmosphere then
-        BlackAtmosphere:Destroy()
-        BlackAtmosphere = nil
+    if GrayAtmosphere then
+        GrayAtmosphere:Destroy()
+        GrayAtmosphere = nil
     end
 
     for obj, parent in pairs(SkySaved) do
@@ -515,34 +503,6 @@ local function restoreSky()
     end
 
     table.clear(SkySaved)
-end
-
-local function applyFPS()
-    if not State.FPS then return end
-
-    optimizeLighting()
-    optimizeTerrain()
-    setLowQuality()
-
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        optimize(obj)
-    end
-
-    blackSky()
-end
-
-local function restoreFPS()
-    restoreVisual()
-    restoreSky()
-    restoreQuality()
-
-    if Terrain and DecorationSaved ~= nil then
-        pcall(function()
-            Terrain.Decoration = DecorationSaved
-        end)
-    end
-
-    DecorationSaved = nil
 end
 
 local function applyBright()
@@ -558,8 +518,8 @@ local function applyBright()
 
     Lighting.Brightness = 3
     Lighting.ClockTime = 14
-    Lighting.Ambient = Color3.fromRGB(170, 170, 170)
-    Lighting.OutdoorAmbient = Color3.fromRGB(170, 170, 170)
+    Lighting.Ambient = Color3.fromRGB(175, 175, 175)
+    Lighting.OutdoorAmbient = Color3.fromRGB(175, 175, 175)
     Lighting.ExposureCompensation = 0.15
 end
 
@@ -573,6 +533,42 @@ local function restoreBright()
     end
 
     BrightSaved = nil
+end
+
+local function applyFPS()
+    if not State.FPS then return end
+
+    optimizeLighting()
+    optimizeTerrain()
+    lowQuality()
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        optimize(obj)
+    end
+
+    applySky()
+
+    if State.Bright then
+        applyBright()
+    end
+end
+
+local function restoreFPS()
+    restoreVisual()
+    restoreSky()
+    restoreQuality()
+
+    if Terrain and DecorationSaved ~= nil then
+        pcall(function()
+            Terrain.Decoration = DecorationSaved
+        end)
+    end
+
+    DecorationSaved = nil
+
+    if State.Bright then
+        applyBright()
+    end
 end
 
 local function fastPrompt(prompt)
@@ -626,9 +622,7 @@ local function getSettings(tool)
 end
 
 local function applyValues(module, keys, saved)
-    if not saved[module] then
-        saved[module] = {}
-    end
+    saved[module] = saved[module] or {}
 
     for _, key in ipairs(keys) do
         local current = module[key]
@@ -779,6 +773,7 @@ Title.Text = "SC FPS | FARHAN STORE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.ZIndex = 3
 Title.Parent = Top
+
 makeText(Title, 12)
 Title.TextColor3 = Color3.fromRGB(140, 200, 255)
 
@@ -789,6 +784,7 @@ Close.BackgroundTransparency = 1
 Close.Text = "X"
 Close.ZIndex = 3
 Close.Parent = Top
+
 makeText(Close, 13)
 
 local function makeButton(label, order)
@@ -835,6 +831,7 @@ Ping.Text = "PING: -- ms"
 Ping.TextXAlignment = Enum.TextXAlignment.Left
 Ping.ZIndex = 3
 Ping.Parent = Main
+
 makeText(Ping, 10)
 
 local function buttonState(button, label, enabled)
@@ -876,6 +873,13 @@ bind(Buttons.Bright.MouseButton1Click, function()
         applyBright()
     else
         restoreBright()
+
+        if State.FPS then
+            Lighting.Brightness = math.max(Lighting.Brightness, 2)
+            Lighting.Ambient = Color3.fromRGB(135, 135, 135)
+            Lighting.OutdoorAmbient = Color3.fromRGB(145, 145, 145)
+            Lighting.ExposureCompensation = 0
+        end
     end
 
     refresh()
@@ -1042,7 +1046,7 @@ bind(Lighting.ChildAdded, function(obj)
         if not Alive or not obj.Parent then return end
 
         if obj:IsA("Sky") or obj:IsA("Atmosphere") then
-            if obj ~= BlackSky and obj ~= BlackAtmosphere then
+            if obj ~= BlackSky and obj ~= GrayAtmosphere then
                 if SkySaved[obj] == nil then
                     SkySaved[obj] = obj.Parent
                 end
@@ -1056,10 +1060,6 @@ bind(Lighting.ChildAdded, function(obj)
     end)
 end)
 
-local PingClock = 0
-local GunClock = 0
-local FlashClock = 0
-
 local function suppressGunFX()
     local character = Player.Character
     if not character then return end
@@ -1067,14 +1067,18 @@ local function suppressGunFX()
     for _, obj in ipairs(character:GetDescendants()) do
         if getTool(obj) then
             if isEffect(obj) or isLight(obj) then
-                disableEffect(obj)
+                disableFX(obj)
 
             elseif isFlash(obj) then
-                disableEffect(obj)
+                disableFX(obj)
             end
         end
     end
 end
+
+local PingClock = 0
+local GunClock = 0
+local FlashClock = 0
 
 bind(RunService.Heartbeat, function(dt)
     PingClock += dt
@@ -1143,12 +1147,13 @@ local function cleanup()
     restoreInteract()
     restoreValues(RecoilSaved)
     restoreValues(SpreadSaved)
-    restoreFPS()
 
     if State.Bright then
         restoreBright()
         State.Bright = false
     end
+
+    restoreFPS()
 
     for _, connection in ipairs(Connections) do
         pcall(function()
@@ -1166,4 +1171,4 @@ end
 ENV.SCFPS_Cleanup = cleanup
 
 refresh()
-print("SC FPS | FARHAN STORE - ULTRA POTATO V2")
+print("SC FPS | FARHAN STORE - ULTRA POTATO V3")
