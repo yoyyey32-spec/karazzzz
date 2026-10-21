@@ -579,7 +579,7 @@ local function fastPrompt(prompt)
     end
 
     pcall(function()
-        prompt.HoldDuration = 0.1
+        prompt.HoldDuration = 0.01
     end)
 end
 
