@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
@@ -31,9 +32,11 @@ local VisualSaved = {}
 local Detached = {}
 local SkySaved = {}
 local PromptSaved = {}
+local FontSaved = {}
 
 local RecoilSaved = {}
 local SpreadSaved = {}
+
 local OriginalGunValues = setmetatable({}, {
     __mode = "k"
 })
@@ -55,33 +58,18 @@ local Buttons = {}
 local Stars = {}
 
 local RecoilKeys = {
-    "Recoil",
-    "RecoilAmount",
-    "CameraRecoil",
-    "CameraShake",
-    "Kick",
-    "Kickback",
-    "VerticalRecoil",
-    "HorizontalRecoil",
-    "RecoilX",
-    "RecoilY",
-    "GunRecoil",
-    "WeaponRecoil",
-    "AimRecoil",
-    "ShakeAmount",
-    "ShakeIntensity"
+    "Recoil", "RecoilAmount", "CameraRecoil",
+    "CameraShake", "Kick", "Kickback",
+    "VerticalRecoil", "HorizontalRecoil",
+    "RecoilX", "RecoilY", "GunRecoil",
+    "WeaponRecoil", "AimRecoil",
+    "ShakeAmount", "ShakeIntensity"
 }
 
 local SpreadKeys = {
-    "Spread",
-    "SpreadX",
-    "SpreadY",
-    "MinSpread",
-    "MaxSpread",
-    "HipSpread",
-    "AimSpread",
-    "SpreadAmount",
-    "Bloom"
+    "Spread", "SpreadX", "SpreadY",
+    "MinSpread", "MaxSpread", "HipSpread",
+    "AimSpread", "SpreadAmount", "Bloom"
 }
 
 local FontFace
@@ -200,25 +188,16 @@ end
 
 local function isFence(obj)
     return ancestorHas(obj, {
-        "fence",
-        "chainlink",
-        "chain_link",
-        "railing",
-        "ironfence",
-        "metal_fence",
-        "grate",
-        "wirefence"
+        "fence", "chainlink", "chain_link",
+        "railing", "ironfence", "metal_fence",
+        "grate", "wirefence"
     }, 6)
 end
 
 local function isVehicle(obj)
     return ancestorHas(obj, {
-        "vehicle",
-        "automobile",
-        "truck",
-        "carbody",
-        "car_model",
-        "vehicles"
+        "vehicle", "automobile", "truck",
+        "carbody", "car_model", "vehicles"
     }, 6)
 end
 
@@ -226,78 +205,54 @@ local function isWeapon(obj)
     if getTool(obj) then return true end
 
     return ancestorHas(obj, {
-        "g17",
-        "glock",
-        "drum",
-        "pistol",
-        "rifle",
-        "shotgun",
-        "revolver",
-        "firearm",
-        "handgun",
-        "ak47",
-        "ak-47",
-        "uzi",
-        "gunmodel",
-        "gun_model",
-        "weaponmodel",
-        "weapon_model",
-        "magazine"
+        "g17", "glock", "drum", "pistol",
+        "rifle", "shotgun", "revolver",
+        "firearm", "handgun", "ak47",
+        "ak-47", "uzi", "gunmodel",
+        "gun_model", "weaponmodel",
+        "weapon_model", "magazine"
     }, 6)
 end
 
 local function isFlash(obj)
     return ancestorHas(obj, {
-        "muzzle",
-        "gunflash",
-        "gun_flash",
-        "gunfire",
-        "gun_fire",
-        "gunshot",
-        "gun_shot",
-        "barrelfx",
-        "barrel_fx",
-        "shootfx",
-        "shoot_fx",
-        "fireeffect",
-        "fire_effect",
-        "tracer",
-        "bullettrail",
-        "bullet_trail",
-        "bulletbeam",
-        "bullet_beam",
-        "gunsmoke",
-        "gun_smoke",
-        "shellparticle",
-        "bulletfx",
-        "bullet_fx",
-        "impactfx",
-        "impact_fx"
+        "muzzle", "gunflash", "gun_flash",
+        "gunfire", "gun_fire", "gunshot",
+        "gun_shot", "barrelfx", "barrel_fx",
+        "shootfx", "shoot_fx", "fireeffect",
+        "fire_effect", "tracer", "bullettrail",
+        "bullet_trail", "bulletbeam",
+        "bullet_beam", "gunsmoke",
+        "gun_smoke", "shellparticle",
+        "bulletfx", "bullet_fx",
+        "impactfx", "impact_fx"
     }, 5)
 end
 
 local function isBlood(obj)
     return ancestorHas(obj, {
-        "blood",
-        "gore",
-        "bleed",
-        "hitblood",
-        "bloodfx",
-        "blood_fx"
+        "blood", "gore", "bleed",
+        "hitblood", "bloodfx", "blood_fx"
     }, 5)
 end
 
 local function isGunStore(obj)
     return ancestorHas(obj, {
-        "gunstore",
-        "gun_store",
-        "gun store",
-        "gunshop",
-        "gun_shop",
-        "gun shop",
-        "weaponstore",
-        "weapon_store"
+        "gunstore", "gun_store", "gun store",
+        "gunshop", "gun_shop", "gun shop",
+        "weaponstore", "weapon_store"
     }, 9)
+end
+
+local function isApartment(obj)
+    return ancestorHas(obj, {
+        "apartment", "apartments",
+        "apartement", "apartemen",
+        "apartmentdoor", "apartment_door",
+        "residential", "residence",
+        "apt_door", "aptdoor",
+        "aptdoor"
+    }, 12)
 end
 
 local function isDoor(obj)
@@ -309,18 +264,16 @@ local function isDoor(obj)
         return false
     end
 
+    if isApartment(obj) then
+        return false
+    end
+
     return hasName(obj, {
-        "door",
-        "pintu",
-        "doorpanel",
-        "door_panel",
-        "glassdoor"
+        "door", "pintu", "doorpanel",
+        "door_panel", "glassdoor"
     }) or ancestorHas(obj, {
-        "door",
-        "pintu",
-        "doorpanel",
-        "door_panel",
-        "glassdoor"
+        "door", "pintu", "doorpanel",
+        "door_panel", "glassdoor"
     }, 3)
 end
 
@@ -333,30 +286,19 @@ local function isGunStoreWood(obj)
         return false
     end
 
-    if isDoor(obj) then
-        return false
-    end
+    if isDoor(obj) then return false end
 
     if hasName(obj, {
-        "counter",
-        "register",
-        "cashier",
-        "purchase",
-        "buy",
-        "prompt",
-        "button",
-        "trigger"
+        "counter", "register", "cashier",
+        "purchase", "buy", "prompt",
+        "button", "trigger"
     }) then
         return false
     end
 
     return hasName(obj, {
-        "wood",
-        "plank",
-        "board",
-        "wooden",
-        "timber",
-        "plywood"
+        "wood", "plank", "board",
+        "wooden", "timber", "plywood"
     })
 end
 
@@ -366,12 +308,8 @@ local function isGunStoreCenter(obj)
     end
 
     return ancestorHas(obj, {
-        "center",
-        "centre",
-        "middle",
-        "interior",
-        "inside",
-        "counter"
+        "center", "centre", "middle",
+        "interior", "inside", "counter"
     }, 4)
 end
 
@@ -426,6 +364,7 @@ end
 
 local function transparentDoor(obj)
     if not obj:IsA("BasePart") then return end
+    if isApartment(obj) then return end
 
     set(obj, "LocalTransparencyModifier", 1)
     set(obj, "CastShadow", false)
@@ -452,7 +391,7 @@ local function potatoPart(obj, weapon)
         ))
 
     elseif isVehicle(obj) then
-        -- Vehicle color stays original.
+        -- Keep vehicle colors.
 
     else
         local c = obj.Color
@@ -532,6 +471,14 @@ local function optimize(obj)
         end
 
         return
+    end
+
+    if isApartment(obj) and isDoor(obj) == false then
+        if obj:IsA("BasePart") and ancestorHas(obj, {
+            "door", "pintu"
+        }, 3) then
+            return
+        end
     end
 
     if isDoor(obj) then
@@ -959,6 +906,44 @@ local function watchCharacter(character)
     end
 end
 
+local function applyGameFont(obj)
+    if not Alive or not FontFace then return end
+    if not obj or not obj.Parent then return end
+
+    if Gui and obj:IsDescendantOf(Gui) then
+        return
+    end
+
+    if obj:IsA("TextLabel")
+        or obj:IsA("TextButton")
+        or obj:IsA("TextBox") then
+
+        if FontSaved[obj] == nil then
+            local ok, old = pcall(function()
+                return obj.FontFace
+            end)
+
+            if ok then
+                FontSaved[obj] = old
+            end
+        end
+
+        pcall(function()
+            obj.FontFace = FontFace
+        end)
+    end
+end
+
+local function restoreGameFont()
+    for obj, font in pairs(FontSaved) do
+        pcall(function()
+            obj.FontFace = font
+        end)
+    end
+
+    table.clear(FontSaved)
+end
+
 local function makeText(obj, size)
     obj.TextSize = size
     obj.TextColor3 = Color3.fromRGB(225, 230, 240)
@@ -1276,7 +1261,36 @@ for _, obj in ipairs(Backpack:GetChildren()) do
     end
 end
 
+for _, obj in ipairs(PlayerGui:GetDescendants()) do
+    applyGameFont(obj)
+end
+
+bind(PlayerGui.DescendantAdded, function(obj)
+    if Alive then
+        applyGameFont(obj)
+    end
+end)
+
+for _, obj in ipairs(Workspace:GetDescendants()) do
+    if obj:IsA("BillboardGui")
+        or obj:IsA("SurfaceGui") then
+
+        for _, child in ipairs(obj:GetDescendants()) do
+            applyGameFont(child)
+        end
+    end
+end
+
 bind(Workspace.DescendantAdded, function(obj)
+    if not Alive then return end
+
+    if obj:IsA("TextLabel")
+        or obj:IsA("TextButton")
+        or obj:IsA("TextBox") then
+
+        applyGameFont(obj)
+    end
+
     if State.FPS then
         task.defer(function()
             if Alive and obj.Parent then
@@ -1409,6 +1423,7 @@ local function cleanup()
     restoreInteract()
     restoreValues(RecoilSaved)
     restoreValues(SpreadSaved)
+    restoreGameFont()
 
     if State.Bright then
         restoreBright()
@@ -1434,4 +1449,4 @@ ENV.SCFPS_Cleanup = cleanup
 
 refresh()
 
-print("SC FPS | FARHAN STORE - V3.2")
+print("SC FPS | FARHAN STORE - V3.3")
