@@ -31,9 +31,16 @@ local VisualSaved = {}
 local Detached = {}
 local SkySaved = {}
 local PromptSaved = {}
+
 local RecoilSaved = {}
 local SpreadSaved = {}
-local OriginalGunValues = setmetatable({}, {__mode = "k"})
+local OriginalGunValues = setmetatable({}, {
+    __mode = "k"
+})
+
+local WatchedTools = setmetatable({}, {
+    __mode = "k"
+})
 
 local BrightSaved
 local QualitySaved
@@ -43,22 +50,38 @@ local BlackSky
 local GrayAtmosphere
 local Gui
 local Main
+
 local Buttons = {}
 local Stars = {}
 
 local RecoilKeys = {
-    "Recoil", "RecoilAmount", "CameraRecoil",
-    "CameraShake", "Kick", "Kickback",
-    "VerticalRecoil", "HorizontalRecoil",
-    "RecoilX", "RecoilY", "GunRecoil",
-    "WeaponRecoil", "AimRecoil",
-    "ShakeAmount", "ShakeIntensity"
+    "Recoil",
+    "RecoilAmount",
+    "CameraRecoil",
+    "CameraShake",
+    "Kick",
+    "Kickback",
+    "VerticalRecoil",
+    "HorizontalRecoil",
+    "RecoilX",
+    "RecoilY",
+    "GunRecoil",
+    "WeaponRecoil",
+    "AimRecoil",
+    "ShakeAmount",
+    "ShakeIntensity"
 }
 
 local SpreadKeys = {
-    "Spread", "SpreadX", "SpreadY",
-    "MinSpread", "MaxSpread", "HipSpread",
-    "AimSpread", "SpreadAmount", "Bloom"
+    "Spread",
+    "SpreadX",
+    "SpreadY",
+    "MinSpread",
+    "MaxSpread",
+    "HipSpread",
+    "AimSpread",
+    "SpreadAmount",
+    "Bloom"
 }
 
 local FontFace
@@ -177,16 +200,25 @@ end
 
 local function isFence(obj)
     return ancestorHas(obj, {
-        "fence", "chainlink", "chain_link",
-        "railing", "ironfence", "metal_fence",
-        "grate", "wirefence"
+        "fence",
+        "chainlink",
+        "chain_link",
+        "railing",
+        "ironfence",
+        "metal_fence",
+        "grate",
+        "wirefence"
     }, 6)
 end
 
 local function isVehicle(obj)
     return ancestorHas(obj, {
-        "vehicle", "automobile", "truck",
-        "carbody", "car_model", "vehicles"
+        "vehicle",
+        "automobile",
+        "truck",
+        "carbody",
+        "car_model",
+        "vehicles"
     }, 6)
 end
 
@@ -194,35 +226,153 @@ local function isWeapon(obj)
     if getTool(obj) then return true end
 
     return ancestorHas(obj, {
-        "g17", "glock", "drum", "pistol",
-        "rifle", "shotgun", "revolver",
-        "firearm", "handgun", "ak47",
-        "ak-47", "uzi", "gunmodel",
-        "gun_model", "weaponmodel",
-        "weapon_model", "magazine"
+        "g17",
+        "glock",
+        "drum",
+        "pistol",
+        "rifle",
+        "shotgun",
+        "revolver",
+        "firearm",
+        "handgun",
+        "ak47",
+        "ak-47",
+        "uzi",
+        "gunmodel",
+        "gun_model",
+        "weaponmodel",
+        "weapon_model",
+        "magazine"
     }, 6)
 end
 
 local function isFlash(obj)
     return ancestorHas(obj, {
-        "muzzle", "gunflash", "gun_flash",
-        "gunfire", "gun_fire", "gunshot",
-        "gun_shot", "barrelfx", "barrel_fx",
-        "shootfx", "shoot_fx", "fireeffect",
-        "fire_effect", "tracer", "bullettrail",
-        "bullet_trail", "bulletbeam",
-        "bullet_beam", "gunsmoke",
-        "gun_smoke", "shellparticle",
-        "bulletfx", "bullet_fx",
-        "impactfx", "impact_fx"
+        "muzzle",
+        "gunflash",
+        "gun_flash",
+        "gunfire",
+        "gun_fire",
+        "gunshot",
+        "gun_shot",
+        "barrelfx",
+        "barrel_fx",
+        "shootfx",
+        "shoot_fx",
+        "fireeffect",
+        "fire_effect",
+        "tracer",
+        "bullettrail",
+        "bullet_trail",
+        "bulletbeam",
+        "bullet_beam",
+        "gunsmoke",
+        "gun_smoke",
+        "shellparticle",
+        "bulletfx",
+        "bullet_fx",
+        "impactfx",
+        "impact_fx"
     }, 5)
 end
 
 local function isBlood(obj)
     return ancestorHas(obj, {
-        "blood", "gore", "bleed",
-        "hitblood", "bloodfx", "blood_fx"
+        "blood",
+        "gore",
+        "bleed",
+        "hitblood",
+        "bloodfx",
+        "blood_fx"
     }, 5)
+end
+
+local function isGunStore(obj)
+    return ancestorHas(obj, {
+        "gunstore",
+        "gun_store",
+        "gun store",
+        "gunshop",
+        "gun_shop",
+        "gun shop",
+        "weaponstore",
+        "weapon_store"
+    }, 9)
+end
+
+local function isDoor(obj)
+    if not obj:IsA("BasePart") then
+        return false
+    end
+
+    if getTool(obj) or ownCharacter(obj) then
+        return false
+    end
+
+    return hasName(obj, {
+        "door",
+        "pintu",
+        "doorpanel",
+        "door_panel",
+        "glassdoor"
+    }) or ancestorHas(obj, {
+        "door",
+        "pintu",
+        "doorpanel",
+        "door_panel",
+        "glassdoor"
+    }, 3)
+end
+
+local function isGunStoreWood(obj)
+    if not isGunStore(obj) then
+        return false
+    end
+
+    if not obj:IsA("BasePart") then
+        return false
+    end
+
+    if isDoor(obj) then
+        return false
+    end
+
+    if hasName(obj, {
+        "counter",
+        "register",
+        "cashier",
+        "purchase",
+        "buy",
+        "prompt",
+        "button",
+        "trigger"
+    }) then
+        return false
+    end
+
+    return hasName(obj, {
+        "wood",
+        "plank",
+        "board",
+        "wooden",
+        "timber",
+        "plywood"
+    })
+end
+
+local function isGunStoreCenter(obj)
+    if not isGunStore(obj) then
+        return false
+    end
+
+    return ancestorHas(obj, {
+        "center",
+        "centre",
+        "middle",
+        "interior",
+        "inside",
+        "counter"
+    }, 4)
 end
 
 local function isEffect(obj)
@@ -250,7 +400,9 @@ local function disableFX(obj)
             end)
         end
 
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+    elseif obj:IsA("Decal")
+        or obj:IsA("Texture") then
+
         set(obj, "Transparency", 1)
     end
 end
@@ -265,9 +417,19 @@ local function stripTexture(obj)
     elseif obj:IsA("SpecialMesh") then
         set(obj, "TextureId", "")
 
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+    elseif obj:IsA("Decal")
+        or obj:IsA("Texture") then
+
         set(obj, "Transparency", 1)
     end
+end
+
+local function transparentDoor(obj)
+    if not obj:IsA("BasePart") then return end
+
+    set(obj, "LocalTransparencyModifier", 1)
+    set(obj, "CastShadow", false)
+    set(obj, "Reflectance", 0)
 end
 
 local function potatoPart(obj, weapon)
@@ -279,6 +441,19 @@ local function potatoPart(obj, weapon)
 
     if weapon then
         set(obj, "Color", Color3.fromRGB(12, 12, 12))
+
+    elseif isGunStoreCenter(obj) then
+        local c = obj.Color
+
+        set(obj, "Color", Color3.new(
+            math.max(c.R, 0.28),
+            math.max(c.G, 0.28),
+            math.max(c.B, 0.28)
+        ))
+
+    elseif isVehicle(obj) then
+        -- Vehicle color stays original.
+
     else
         local c = obj.Color
 
@@ -300,7 +475,11 @@ local function potatoPart(obj, weapon)
         set(obj, "TextureID", "")
 
         pcall(function()
-            set(obj, "RenderFidelity", Enum.RenderFidelity.Performance)
+            set(
+                obj,
+                "RenderFidelity",
+                Enum.RenderFidelity.Performance
+            )
         end)
     end
 end
@@ -311,20 +490,26 @@ local function optimize(obj)
 
     if obj:IsA("ProximityPrompt")
         or obj:IsA("ClickDetector")
-        or obj:IsA("Sound") then
+        or obj:IsA("Sound")
+        or obj:IsA("ModuleScript")
+        or obj:IsA("Script")
+        or obj:IsA("LocalScript") then
+
         return
     end
 
-    local tool = getTool(obj)
-
     if isFlash(obj) or isBlood(obj) then
-        if isEffect(obj) or isLight(obj)
+        if isEffect(obj)
+            or isLight(obj)
             or obj:IsA("Decal")
             or obj:IsA("Texture") then
+
             disableFX(obj)
             return
         end
     end
+
+    local tool = getTool(obj)
 
     if tool then
         if isEffect(obj) or isLight(obj) then
@@ -349,6 +534,17 @@ local function optimize(obj)
         return
     end
 
+    if isDoor(obj) then
+        transparentDoor(obj)
+        return
+    end
+
+    if isGunStoreWood(obj) then
+        set(obj, "LocalTransparencyModifier", 1)
+        set(obj, "CastShadow", false)
+        return
+    end
+
     if isFence(obj) then
         if obj:IsA("BasePart") then
             set(obj, "CastShadow", false)
@@ -369,10 +565,6 @@ local function optimize(obj)
 
     if obj:IsA("BasePart") then
         potatoPart(obj, isWeapon(obj))
-
-        if isVehicle(obj) then
-            set(obj, "CastShadow", false)
-        end
     else
         stripTexture(obj)
     end
@@ -392,7 +584,6 @@ local function optimizeLighting()
     ))
 
     set(Lighting, "ExposureCompensation", 0)
-
     set(Lighting, "FogEnd", 100000)
 end
 
@@ -429,7 +620,8 @@ local function lowQuality()
             QualitySaved = rendering.QualityLevel
         end
 
-        rendering.QualityLevel = Enum.QualityLevel.Level01
+        rendering.QualityLevel =
+            Enum.QualityLevel.Level01
     end)
 end
 
@@ -446,7 +638,9 @@ end
 local function applySky()
     for _, obj in ipairs(Lighting:GetChildren()) do
         if obj ~= BlackSky and obj ~= GrayAtmosphere then
-            if obj:IsA("Sky") or obj:IsA("Atmosphere") then
+            if obj:IsA("Sky")
+                or obj:IsA("Atmosphere") then
+
                 if SkySaved[obj] == nil then
                     SkySaved[obj] = obj.Parent
                 end
@@ -481,7 +675,6 @@ local function applySky()
     GrayAtmosphere.Haze = 0
     GrayAtmosphere.Glare = 0
     GrayAtmosphere.Offset = 0
-
     GrayAtmosphere.Parent = Lighting
 end
 
@@ -512,7 +705,8 @@ local function applyBright()
             ClockTime = Lighting.ClockTime,
             Ambient = Lighting.Ambient,
             OutdoorAmbient = Lighting.OutdoorAmbient,
-            ExposureCompensation = Lighting.ExposureCompensation
+            ExposureCompensation =
+                Lighting.ExposureCompensation
         }
     end
 
@@ -572,7 +766,9 @@ local function restoreFPS()
 end
 
 local function fastPrompt(prompt)
-    if not prompt:IsA("ProximityPrompt") then return end
+    if not prompt:IsA("ProximityPrompt") then
+        return
+    end
 
     if PromptSaved[prompt] == nil then
         PromptSaved[prompt] = prompt.HoldDuration
@@ -606,9 +802,11 @@ local function getSettings(tool)
         return nil
     end
 
-    local setting = tool:FindFirstChild("Setting")
+    local setting = tool:FindFirstChild("Setting", true)
 
-    if not setting or not setting:IsA("ModuleScript") then
+    if not setting
+        or not setting:IsA("ModuleScript") then
+
         return nil
     end
 
@@ -623,6 +821,7 @@ end
 
 local function applyValues(module, keys, saved)
     local original = OriginalGunValues[module]
+
     if not original then
         original = {}
         OriginalGunValues[module] = original
@@ -632,13 +831,18 @@ local function applyValues(module, keys, saved)
 
     for _, key in ipairs(keys) do
         local current = module[key]
+
         if type(current) == "number" then
             if original[key] == nil and current ~= 0.1 then
                 original[key] = current
             end
-            if saved[module][key] == nil and original[key] ~= nil then
+
+            if saved[module][key] == nil
+                and original[key] ~= nil then
+
                 saved[module][key] = original[key]
             end
+
             if saved[module][key] ~= nil then
                 module[key] = 0.1
             end
@@ -654,6 +858,7 @@ local function restoreValues(saved)
             end)
         end
     end
+
     table.clear(saved)
 end
 
@@ -696,6 +901,61 @@ local function applyAllGuns()
                 applyGun(obj)
             end
         end
+    end
+end
+
+local function watchTool(tool)
+    if not tool:IsA("Tool") then return end
+    if WatchedTools[tool] then return end
+
+    WatchedTools[tool] = true
+
+    bind(tool.DescendantAdded, function(obj)
+        if not Alive then return end
+
+        if State.FPS then
+            task.defer(function()
+                if Alive and obj.Parent then
+                    optimize(obj)
+                end
+            end)
+        end
+
+        if obj:IsA("ModuleScript")
+            and obj.Name == "Setting" then
+
+            task.defer(function()
+                if Alive then
+                    applyGun(tool)
+                end
+            end)
+        end
+    end)
+
+    task.defer(function()
+        if not Alive or not tool.Parent then return end
+
+        applyGun(tool)
+
+        if State.FPS then
+            for _, obj in ipairs(tool:GetDescendants()) do
+                optimize(obj)
+            end
+        end
+    end)
+end
+
+local function watchCharacter(character)
+    bind(character.ChildAdded, watchTool)
+
+    for _, obj in ipairs(character:GetChildren()) do
+        if obj:IsA("Tool") then
+            watchTool(obj)
+        end
+    end
+
+    if State.Recoil or State.Spread then
+        task.defer(applyAllGuns)
     end
 end
 
@@ -797,6 +1057,7 @@ makeText(Close, 13)
 
 local function makeButton(label, order)
     local button = Instance.new("TextButton")
+
     button.Name = label:gsub("%s+", "") .. "Button"
     button.Size = UDim2.new(1, -18, 0, 27)
 
@@ -843,7 +1104,9 @@ Ping.Parent = Main
 makeText(Ping, 10)
 
 local function buttonState(button, label, enabled)
-    button.Text = label .. (enabled and ": ON" or ": OFF")
+    button.Text = label .. (
+        enabled and ": ON" or ": OFF"
+    )
 
     button.TextColor3 = enabled
         and Color3.fromRGB(120, 210, 255)
@@ -887,9 +1150,16 @@ bind(Buttons.Bright.MouseButton1Click, function()
         restoreBright()
 
         if State.FPS then
-            Lighting.Brightness = math.max(Lighting.Brightness, 2)
-            Lighting.Ambient = Color3.fromRGB(135, 135, 135)
-            Lighting.OutdoorAmbient = Color3.fromRGB(145, 145, 145)
+            Lighting.Brightness = math.max(
+                Lighting.Brightness, 2
+            )
+
+            Lighting.Ambient =
+                Color3.fromRGB(135, 135, 135)
+
+            Lighting.OutdoorAmbient =
+                Color3.fromRGB(145, 145, 145)
+
             Lighting.ExposureCompensation = 0
         end
     end
@@ -990,40 +1260,6 @@ bind(UIS.InputBegan, function(input, processed)
     end
 end)
 
-local function watchTool(obj)
-    if not obj:IsA("Tool") then return end
-
-    task.defer(function()
-        if not Alive or not obj.Parent then return end
-
-        applyGun(obj)
-
-        if State.FPS then
-            for _, part in ipairs(obj:GetDescendants()) do
-                optimize(part)
-            end
-        end
-    end)
-end
-
-local function watchCharacter(character)
-    bind(character.ChildAdded, watchTool)
-
-    if State.Recoil or State.Spread then
-        task.defer(applyAllGuns)
-    end
-
-    if State.FPS then
-        task.defer(function()
-            if not Alive then return end
-
-            for _, obj in ipairs(character:GetDescendants()) do
-                optimize(obj)
-            end
-        end)
-    end
-end
-
 if Player.Character then
     watchCharacter(Player.Character)
 end
@@ -1031,7 +1267,14 @@ end
 bind(Player.CharacterAdded, watchCharacter)
 
 local Backpack = Player:WaitForChild("Backpack")
+
 bind(Backpack.ChildAdded, watchTool)
+
+for _, obj in ipairs(Backpack:GetChildren()) do
+    if obj:IsA("Tool") then
+        watchTool(obj)
+    end
+end
 
 bind(Workspace.DescendantAdded, function(obj)
     if State.FPS then
@@ -1057,8 +1300,12 @@ bind(Lighting.ChildAdded, function(obj)
     task.defer(function()
         if not Alive or not obj.Parent then return end
 
-        if obj:IsA("Sky") or obj:IsA("Atmosphere") then
-            if obj ~= BlackSky and obj ~= GrayAtmosphere then
+        if obj:IsA("Sky")
+            or obj:IsA("Atmosphere") then
+
+            if obj ~= BlackSky
+                and obj ~= GrayAtmosphere then
+
                 if SkySaved[obj] == nil then
                     SkySaved[obj] = obj.Parent
                 end
@@ -1101,7 +1348,9 @@ bind(RunService.Heartbeat, function(dt)
         PingClock = 0
 
         local ok, value = pcall(function()
-            return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+            return Stats.Network.ServerStatsItem[
+                "Data Ping"
+            ]:GetValue()
         end)
 
         if ok and type(value) == "number" then
@@ -1136,6 +1385,7 @@ bind(RunService.RenderStepped, function(dt)
 
         if star and star.Parent then
             local pos = star.Position
+
             local x = pos.X.Scale + item.Speed * dt
             local y = pos.Y.Scale + item.Speed * 0.45 * dt
 
@@ -1183,4 +1433,5 @@ end
 ENV.SCFPS_Cleanup = cleanup
 
 refresh()
-print("SC FPS | FARHAN STORE ")
+
+print("SC FPS | FARHAN STORE - V3.2")
