@@ -1,3 +1,5 @@
+print('[Farhan FPS] V2.6 DEBUG: script started')
+local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
 local Lighting = game:GetService('Lighting')
@@ -247,7 +249,9 @@ local function enable()
     applyLighting()
     for _, root in ipairs({Lighting, Workspace, PlayerGui}) do
         if not Enabled or not Alive then break end
-        scan(root)
+        local ok, err = pcall(scan, root)
+        if not ok then warn('[Farhan FPS] Scan error:', err) end
+        task.wait()
     end
     Busy = false
     refresh()
@@ -393,7 +397,10 @@ Status.Parent = Main
 
 bind(EnableButton.MouseButton1Click, function()
     if Busy then return end
-    if Enabled then disable() else task.spawn(enable) end
+    if Enabled then disable() else task.spawn(function()
+        local ok, err = pcall(enable)
+        if not ok then Busy = false; Status.Text = 'ERROR - CHECK CONSOLE'; warn('[Farhan FPS] Enable error:', err) end
+    end) end
 end)
 bind(LightButton.MouseButton1Click, function()
     if Busy then return end
@@ -493,3 +500,15 @@ end
 ENV.FarhanFPSOnlyCleanup = cleanup
 refresh()
 print('FARHAN STORE | FPS ONLY EXTREME V2.6')
+
+end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
+if not __ok then
+    warn('[Farhan FPS] STARTUP ERROR: ' .. tostring(__err))
+    pcall(function()
+        local p = game:GetService('Players').LocalPlayer:WaitForChild('PlayerGui')
+        local g = Instance.new('ScreenGui'); g.Name = 'FarhanFPS_Error'; g.ResetOnSpawn = false; g.Parent = p
+        local t = Instance.new('TextLabel'); t.Size = UDim2.fromOffset(340, 90); t.Position = UDim2.fromOffset(20, 100)
+        t.BackgroundColor3 = Color3.fromRGB(40, 10, 15); t.TextColor3 = Color3.new(1,1,1)
+        t.TextWrapped = true; t.Text = 'FARHAN FPS STARTUP ERROR\n' .. tostring(__err):sub(1,180); t.Parent = g
+    end)
+end
