@@ -2,9 +2,10 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
+local CoreGui = game:GetService("CoreGui")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -20,33 +21,23 @@ local Alive = true
 local Enabled = false
 local Light = false
 local Busy = false
-local Version = 0
-
+local Minimized = false
 local Saved = {}
-local Indexed = {}
-local Known = {}
-local Connections = {}
+local FontSaved = {}
+local Detached = {}
 local Guards = {}
-local Queue = {}
-local Queued = {}
-local Head = 1
-local Running = false
+local Connections = {}
 local OriginalLighting = {}
 local OriginalQuality
 local Ping = 0
 local FPS = 0
-
-local GUI
-local Main
-local EnableButton
-local LightButton
-local Status
-local PingLabel
-local FPSLabel
-local Font
+local HighPing = false
+local GUI, Main, EnableButton, LightButton
+local Status, PingLabel, FPSLabel
+local CustomFont
 
 pcall(function()
-    Font = Font.fromId(12187372382)
+    CustomFont = Font.fromId(12187372382)
 end)
 
 local function connect(signal, fn)
@@ -55,35 +46,64 @@ local function connect(signal, fn)
     return c
 end
 
-local function setFont(obj)
-    if Font then
-        local ok = pcall(function()
-            obj.FontFace = Font
-        end)
-        if ok then return end
-    end
-    obj.Font = Enum.Font.GothamBold
+local function isText(obj)
+    return obj:IsA("TextLabel")
+        or obj:IsA("TextButton")
+        or obj:IsA("TextBox")
 end
 
-local function saveSet(obj, property, value)
+local function applyFont(obj)
+    if not Alive or not CustomFont or not isText(obj) then return end
+
+    if FontSaved[obj] == nil then
+        local ok, original = pcall(function()
+            return obj.FontFace
+        end)
+
+        if ok then
+            FontSaved[obj] = original
+        end
+    end
+
+    pcall(function()
+        obj.FontFace = CustomFont
+    end)
+end
+
+local function scanFonts(root)
+    if not root then return end
+
+    if isText(root) then
+        applyFont(root)
+    end
+
+    for _, obj in ipairs(root:GetDescendants()) do
+        applyFont(obj)
+    end
+end
+
+local function saveSet(obj, prop, value)
     if not obj then return end
 
     local ok, original = pcall(function()
-        return obj[property]
+        return obj[prop]
     end)
 
     if not ok then return end
 
-    if not Saved[obj] then
-        Saved[obj] = {}
+    local data = Saved[obj]
+
+    if not data then
+        data = {}
+        Saved[obj] = data
     end
 
-    if not Saved[obj][property] then
-        Saved[obj][property] = {original}
+    if data[prop] == nil then
+        data[prop] = {original}
     end
 
     pcall(function()
-        obj[property] = value
+        obj[prop] = value
     end)
 end
 
@@ -98,20 +118,20 @@ local function isEffect(obj)
         or obj:IsA("PostEffect")
 end
 
-local function isWeaponEffect(obj)
+local function weaponVisual(obj)
     local current = obj
 
     while current and current ~= game do
-        local name = current.Name:lower()
+        local n = current.Name:lower()
 
-        if name:find("muzzle", 1, true)
-            or name:find("flash", 1, true)
-            or name:find("gunfire", 1, true)
-            or name:find("shoot", 1, true)
-            or name:find("smoke", 1, true)
-            or name:find("recoilblur", 1, true)
-            or name:find("shootblur", 1, true) then
-            return true
+        for _, word in ipairs({
+            "muzzle", "flash", "gunfire", "shoot",
+            "smoke", "shotblur", "shootblur",
+            "recoilblur", "gunblur", "gunfx"
+        }) do
+            if n:find(word, 1, true) then
+                return true
+            end
         end
 
         current = current.Parent
@@ -120,10 +140,21 @@ local function isWeaponEffect(obj)
     return false
 end
 
-local function guard(obj)
-    if Guards[obj] or not Alive then return end
+local function protectedGeometry(obj)
+    local char = Player.Character
 
-    local ok, c = pcall(function()
+    if char and obj:IsDescendantOf(char) then
+        return true
+    end
+
+    return obj:FindFirstAncestorOfClass("Tool") ~= nil
+        or obj:FindFirstAncestorOfClass("Accessory") ~= nil
+end
+
+local function guard(obj)
+    if Guards[obj] then return end
+
+    local ok, connection = pcall(function()
         return obj:GetPropertyChangedSignal("Enabled"):Connect(function()
             if not Alive or not Enabled then return end
 
@@ -136,73 +167,117 @@ local function guard(obj)
     end)
 
     if ok then
-        Guards[obj] = c
+        Guards[obj] = connection
     end
 end
 
-local function optimizeEffect(obj)
-    if not Enabled or not obj.Parent then return end
+local function gunStoreWood(obj)
+    if not obj:IsA("BasePart") then return false end
+    if protectedGeometry(obj) then return false end
+    if not obj.Anchored then return false end
+    if obj.CanCollide or obj.CanTouch or obj.CanQuery then return false end
+
+    if obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+        or obj:FindFirstChildWhichIsA("ClickDetector", true) then
+        return false
+    end
+
+    local wood = false
+    local store = false
+    local current = obj
+
+    while current and current ~= Workspace do
+        local n = current.Name:lower()
+
+        for _, word in ipairs({
+            "door", "floor", "weapon", "counter",
+            "register", "handle", "button"
+        }) do
+            if n:find(word, 1, true) then
+                return false
+            end
+        end
+
+        for _, word in ipairs({
+            "wood", "plank", "board", "timber", "kayu"
+        }) do
+            if n:find(word, 1, true) then
+                wood = true
+            end
+        end
+
+        for _, word in ipairs({
+            "gunstore", "gun store", "gunshop", "gun_shop"
+        }) do
+            if n:find(word, 1, true) then
+                store = true
+            end
+        end
+
+        current = current.Parent
+    end
+
+    return wood and store
+end
+
+local function optimize(obj)
+    if not Alive or not Enabled or not obj.Parent then return end
+    if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
 
     if isEffect(obj) then
         saveSet(obj, "Enabled", false)
 
         if obj:IsA("ParticleEmitter") then
             saveSet(obj, "Rate", 0)
+
             pcall(function()
                 obj:Clear()
             end)
         end
 
         guard(obj)
-        return true
+        return
     end
 
     if obj:IsA("PointLight")
         or obj:IsA("SpotLight")
         or obj:IsA("SurfaceLight") then
 
-        if isWeaponEffect(obj) then
+        if weaponVisual(obj) then
             saveSet(obj, "Enabled", false)
             guard(obj)
         else
             saveSet(obj, "Shadows", false)
         end
 
-        return true
+        return
     end
 
     if obj:IsA("Decal") or obj:IsA("Texture") then
-        if isWeaponEffect(obj) then
+        if not protectedGeometry(obj) or weaponVisual(obj) then
             saveSet(obj, "Transparency", 1)
-            return true
         end
+
+        return
     end
-
-    return false
-end
-
-local function protectedGeometry(obj)
-    local character = Player.Character
-
-    if character and obj:IsDescendantOf(character) then
-        return true
-    end
-
-    if obj:FindFirstAncestorOfClass("Tool")
-        or obj:FindFirstAncestorOfClass("Accessory") then
-        return true
-    end
-
-    return false
-end
-
-local function optimize(obj)
-    if not Alive or not Enabled or not obj.Parent then return end
-
-    if optimizeEffect(obj) then return end
 
     if obj:IsA("BasePart") then
         if protectedGeometry(obj) then return end
+
+        if gunStoreWood(obj) then
+            if Detached[obj] == nil then
+                local parent = obj.Parent
+                local ok = pcall(function()
+                    obj.Parent = nil
+                end)
+
+                if ok then
+                    Detached[obj] = parent
+                end
+            end
+
+            return
+        end
 
         saveSet(obj, "Material", Enum.Material.Plastic)
         saveSet(obj, "Reflectance", 0)
@@ -214,19 +289,17 @@ local function optimize(obj)
         end
 
     elseif obj:IsA("SpecialMesh") then
-        if protectedGeometry(obj) then return end
-        saveSet(obj, "TextureId", "")
+        if not protectedGeometry(obj) then
+            saveSet(obj, "TextureId", "")
+        end
 
     elseif obj:IsA("SurfaceAppearance") then
-        if protectedGeometry(obj) then return end
-        saveSet(obj, "ColorMap", "")
-        saveSet(obj, "NormalMap", "")
-        saveSet(obj, "MetalnessMap", "")
-        saveSet(obj, "RoughnessMap", "")
-
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        if protectedGeometry(obj) then return end
-        saveSet(obj, "Transparency", 1)
+        if not protectedGeometry(obj) then
+            saveSet(obj, "ColorMap", "")
+            saveSet(obj, "NormalMap", "")
+            saveSet(obj, "MetalnessMap", "")
+            saveSet(obj, "RoughnessMap", "")
+        end
 
     elseif obj:IsA("Clouds") then
         saveSet(obj, "Enabled", false)
@@ -237,15 +310,11 @@ local function optimize(obj)
         saveSet(obj, "Glare", 0)
 
     elseif obj:IsA("Sky") then
-        for _, property in ipairs({
-            "SkyboxBk",
-            "SkyboxDn",
-            "SkyboxFt",
-            "SkyboxLf",
-            "SkyboxRt",
-            "SkyboxUp"
+        for _, prop in ipairs({
+            "SkyboxBk", "SkyboxDn", "SkyboxFt",
+            "SkyboxLf", "SkyboxRt", "SkyboxUp"
         }) do
-            saveSet(obj, property, "")
+            saveSet(obj, prop, "")
         end
 
         saveSet(obj, "CelestialBodiesShown", false)
@@ -253,25 +322,21 @@ local function optimize(obj)
     end
 end
 
-for _, property in ipairs({
-    "Brightness",
-    "Ambient",
-    "OutdoorAmbient",
-    "ExposureCompensation",
-    "GlobalShadows",
-    "EnvironmentDiffuseScale",
-    "EnvironmentSpecularScale",
+for _, prop in ipairs({
+    "Brightness", "Ambient", "OutdoorAmbient",
+    "ExposureCompensation", "GlobalShadows",
+    "EnvironmentDiffuseScale", "EnvironmentSpecularScale",
     "ShadowSoftness"
 }) do
     pcall(function()
-        OriginalLighting[property] = Lighting[property]
+        OriginalLighting[prop] = Lighting[prop]
     end)
 end
 
 local function applyLighting()
-    for property, value in pairs(OriginalLighting) do
+    for prop, value in pairs(OriginalLighting) do
         pcall(function()
-            Lighting[property] = value
+            Lighting[prop] = value
         end)
     end
 
@@ -294,24 +359,6 @@ local function applyLighting()
     end
 end
 
-local function index(obj)
-    if Known[obj] then return end
-    Known[obj] = true
-    Indexed[#Indexed + 1] = obj
-end
-
-local function enqueue(obj)
-    if not obj or not obj.Parent or Queued[obj] then return end
-    Queued[obj] = true
-    Queue[#Queue + 1] = obj
-end
-
-local function clearQueue()
-    Queue = {}
-    Queued = {}
-    Head = 1
-end
-
 local function refresh()
     if not EnableButton then return end
 
@@ -323,7 +370,8 @@ local function refresh()
         and Color3.fromRGB(0, 110, 245)
         or Color3.fromRGB(22, 37, 60)
 
-    Status.Text = Busy and "RESTORING"
+    Status.Text = Busy and "PROCESSING"
+        or Enabled and HighPing and "ACTIVE | HIGH PING"
         or Enabled and "ULTRA POTATO ACTIVE"
         or "READY"
 
@@ -332,55 +380,22 @@ local function refresh()
         or Color3.fromRGB(151, 179, 210)
 end
 
-local function worker()
-    if Running or not Enabled then return end
-
-    Running = true
-    local token = Version
-
-    task.spawn(function()
-        while Alive and Enabled and token == Version do
-            local start = os.clock()
-            local budget = Ping >= 180 and 0.001 or 0.0025
-
-            while Head <= #Queue do
-                if not Enabled or token ~= Version then break end
-
-                local obj = Queue[Head]
-                Queue[Head] = false
-                Head += 1
-
-                if obj then
-                    Queued[obj] = nil
-                    pcall(optimize, obj)
-                end
-
-                if os.clock() - start >= budget then
-                    break
-                end
-            end
-
-            if Head > #Queue then
-                clearQueue()
-                break
-            end
-
-            RunService.Heartbeat:Wait()
+local function scanNow()
+    for _, root in ipairs({
+        Lighting, PlayerGui, Backpack, Workspace
+    }) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            if not Alive or not Enabled then return end
+            pcall(optimize, obj)
         end
-
-        Running = false
-
-        if Alive and Enabled and Head <= #Queue then
-            task.defer(worker)
-        end
-    end)
+    end
 end
 
 local function enable()
     if Busy or Enabled or not Alive then return end
 
+    Busy = true
     Enabled = true
-    Version += 1
     refresh()
 
     saveSet(Terrain, "WaterWaveSize", 0)
@@ -399,50 +414,10 @@ local function enable()
     end)
 
     applyLighting()
+    scanNow()
 
-    local camera = Workspace.CurrentCamera
-    local position = camera and camera.CFrame.Position
-
-    clearQueue()
-
-    local priority = {}
-    local remaining = {}
-
-    for _, obj in ipairs(Indexed) do
-        if obj.Parent then
-            if isEffect(obj) or isWeaponEffect(obj) then
-                priority[#priority + 1] = obj
-
-            elseif position and obj:IsA("BasePart")
-                and (obj.Position - position).Magnitude <= 110 then
-
-                priority[#priority + 1] = obj
-
-                for _, child in ipairs(obj:GetChildren()) do
-                    priority[#priority + 1] = child
-                end
-            else
-                remaining[#remaining + 1] = obj
-            end
-        end
-    end
-
-    local start = os.clock()
-
-    for _, obj in ipairs(priority) do
-        pcall(optimize, obj)
-
-        if os.clock() - start >= 0.008 then
-            RunService.Heartbeat:Wait()
-            start = os.clock()
-        end
-    end
-
-    for _, obj in ipairs(remaining) do
-        enqueue(obj)
-    end
-
-    worker()
+    Busy = false
+    refresh()
 end
 
 local function disable()
@@ -450,55 +425,45 @@ local function disable()
 
     Busy = true
     Enabled = false
-    Version += 1
     refresh()
 
-    task.spawn(function()
-        while Running do
-            RunService.Heartbeat:Wait()
-        end
+    for obj, connection in pairs(Guards) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+        Guards[obj] = nil
+    end
 
-        clearQueue()
+    for obj, parent in pairs(Detached) do
+        pcall(function()
+            obj.Parent = parent
+        end)
+        Detached[obj] = nil
+    end
 
-        for obj, connection in pairs(Guards) do
+    for obj, properties in pairs(Saved) do
+        for prop, original in pairs(properties) do
             pcall(function()
-                connection:Disconnect()
+                obj[prop] = original[1]
             end)
-            Guards[obj] = nil
         end
+        Saved[obj] = nil
+    end
 
-        local start = os.clock()
+    if OriginalQuality ~= nil then
+        pcall(function()
+            settings().Rendering.QualityLevel = OriginalQuality
+        end)
+        OriginalQuality = nil
+    end
 
-        for obj, properties in pairs(Saved) do
-            for property, original in pairs(properties) do
-                pcall(function()
-                    obj[property] = original[1]
-                end)
-            end
-
-            Saved[obj] = nil
-
-            if os.clock() - start >= 0.0025 then
-                RunService.Heartbeat:Wait()
-                start = os.clock()
-            end
-        end
-
-        if OriginalQuality ~= nil then
-            pcall(function()
-                settings().Rendering.QualityLevel = OriginalQuality
-            end)
-            OriginalQuality = nil
-        end
-
-        Busy = false
-        applyLighting()
-        refresh()
-    end)
+    Busy = false
+    applyLighting()
+    refresh()
 end
 
 GUI = Instance.new("ScreenGui")
-GUI.Name = "FarhanStore_V20"
+GUI.Name = "FarhanStore_V23"
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -540,7 +505,6 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextSize = 19
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.Text = '<font color="#FFFFFF">Farhan</font><font color="#168BFF">Store</font>'
-setFont(Title)
 Title.Parent = Header
 
 local Minimize = Instance.new("TextButton")
@@ -551,7 +515,6 @@ Minimize.BorderSizePixel = 0
 Minimize.Text = "−"
 Minimize.TextColor3 = Color3.new(1, 1, 1)
 Minimize.TextSize = 16
-setFont(Minimize)
 Minimize.Parent = Header
 
 local minimizeCorner = Instance.new("UICorner")
@@ -575,7 +538,6 @@ local function makeButton(name, y)
     button.Text = name
     button.TextColor3 = Color3.fromRGB(245, 249, 255)
     button.TextSize = 15
-    setFont(button)
     button.Parent = Main
 
     local c = Instance.new("UICorner")
@@ -613,7 +575,6 @@ local function infoLabel(value, position, size, alignment)
     label.TextColor3 = Color3.fromRGB(112, 193, 255)
     label.TextSize = 13
     label.TextXAlignment = alignment
-    setFont(label)
     label.Parent = Info
     return label
 end
@@ -629,7 +590,7 @@ FPSLabel = infoLabel(
     "FPS: --",
     UDim2.new(0.57, 0, 0, 0),
     UDim2.new(0.43, -7, 1, 0),
-    Enum.TextXAlignment.Right
+    UDim2.new(0.43, -7, 1, 0) and Enum.TextXAlignment.Right
 )
 
 Status = Instance.new("TextLabel")
@@ -638,7 +599,6 @@ Status.Position = UDim2.fromOffset(10, 167)
 Status.BackgroundTransparency = 1
 Status.TextSize = 11
 Status.TextColor3 = Color3.fromRGB(151, 179, 210)
-setFont(Status)
 Status.Parent = Main
 
 connect(EnableButton.MouseButton1Click, function()
@@ -657,8 +617,6 @@ connect(LightButton.MouseButton1Click, function()
     applyLighting()
     refresh()
 end)
-
-local Minimized = false
 
 connect(Minimize.MouseButton1Click, function()
     Minimized = not Minimized
@@ -722,6 +680,12 @@ end)
 connect(game.DescendantAdded, function(obj)
     if not Alive then return end
 
+    if isText(obj) then
+        applyFont(obj)
+    end
+
+    if not Enabled or Busy then return end
+
     local valid = false
 
     pcall(function()
@@ -731,17 +695,8 @@ connect(game.DescendantAdded, function(obj)
             or obj:IsDescendantOf(Backpack)
     end)
 
-    if not valid then return end
-
-    index(obj)
-
-    if Enabled then
-        if isEffect(obj) or isWeaponEffect(obj) then
-            pcall(optimize, obj)
-        else
-            enqueue(obj)
-            worker()
-        end
+    if valid then
+        pcall(optimize, obj)
     end
 end)
 
@@ -763,56 +718,41 @@ end)
 
 task.spawn(function()
     while Alive do
-        local value = "--"
+        local display = "--"
 
         pcall(function()
             local item = Stats.Network.ServerStatsItem["Data Ping"]
-            local number = tonumber(item:GetValueString():match("[%d%.]+"))
+            local number = tonumber(
+                item:GetValueString():match("[%d%.]+")
+            )
 
             if number then
                 Ping = math.floor(number + 0.5)
-                value = tostring(Ping)
+                display = tostring(Ping)
             end
         end)
 
-        PingLabel.Text = "PING: " .. value .. " ms"
-        FPSLabel.Text = "FPS: " .. FPS
+        local previous = HighPing
 
-        task.wait(0.1)
-    end
-end)
-
-task.spawn(function()
-    local start = os.clock()
-
-    for _, root in ipairs({
-        Workspace,
-        Lighting,
-        PlayerGui,
-        Backpack
-    }) do
-        if not Alive then return end
-
-        index(root)
-
-        for _, obj in ipairs(root:GetDescendants()) do
-            if not Alive then return end
-
-            index(obj)
-
-            if Enabled then
-                enqueue(obj)
-            end
-
-            if os.clock() - start >= 0.0025 then
-                RunService.Heartbeat:Wait()
-                start = os.clock()
-            end
+        if Ping >= 180 then
+            HighPing = true
+        elseif Ping > 0 and Ping <= 140 then
+            HighPing = false
         end
-    end
 
-    if Enabled then
-        worker()
+        if previous ~= HighPing then
+            refresh()
+        end
+
+        if PingLabel then
+            PingLabel.Text = "PING: " .. display .. " ms"
+        end
+
+        if FPSLabel then
+            FPSLabel.Text = "FPS: " .. FPS
+        end
+
+        task.wait(HighPing and 0.25 or 0.1)
     end
 end)
 
@@ -823,15 +763,8 @@ local function cleanup()
         disable()
     end
 
-    while Busy do
-        RunService.Heartbeat:Wait()
-    end
-
     Alive = false
     Light = false
-    Version += 1
-
-    applyLighting()
 
     for _, connection in ipairs(Connections) do
         pcall(function()
@@ -845,6 +778,15 @@ local function cleanup()
         end)
     end
 
+    for obj, original in pairs(FontSaved) do
+        pcall(function()
+            obj.FontFace = original
+        end)
+    end
+
+    table.clear(FontSaved)
+    applyLighting()
+
     if GUI then
         GUI:Destroy()
     end
@@ -852,6 +794,11 @@ end
 
 ENV.FarhanFPSOnlyCleanup = cleanup
 
+scanFonts(PlayerGui)
+pcall(function()
+    scanFonts(CoreGui)
+end)
+
 refresh()
 
-print("FARHAN STORE | V2.0")
+print("FARHAN STORE")
