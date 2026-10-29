@@ -854,4 +854,4 @@ ENV.FarhanFPSOnlyCleanup = cleanup
 
 refresh()
 
-print("FARHAN STORE")
+print("FARHAN STORE | V2.0")
