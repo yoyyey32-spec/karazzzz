@@ -1,310 +1,348 @@
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 
 local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
 local ENV = getgenv and getgenv() or _G
 
 if type(ENV.FarhanScannerCleanup) == "function" then
     pcall(ENV.FarhanScannerCleanup)
 end
 
-local Config = {
-    MaxLogs = 120,
-    ScanInterval = 0.5,
-    MaxChildren = 35
-}
-
 local Alive = true
 local Scanning = false
 local Connections = {}
 local ScanConnections = {}
-local WatchedTools = {}
-local Logs = {}
-local LastTool = nil
+local Watched = {}
+local Reports = {}
+local Events = {}
+local SelectedGun = nil
+local MaxEvents = 3000
 
-local function connect(signal, callback, bucket)
-    local connection = signal:Connect(callback)
-    table.insert(bucket or Connections, connection)
-    return connection
+local function bind(signal, callback, bucket)
+    local c = signal:Connect(callback)
+    table.insert(bucket or Connections, c)
+    return c
 end
 
-local function disconnectAll(bucket)
-    for _, connection in ipairs(bucket) do
+local function disconnect(bucket)
+    for _, c in ipairs(bucket) do
         pcall(function()
-            connection:Disconnect()
+            c:Disconnect()
         end)
     end
     table.clear(bucket)
 end
 
-local function timestamp()
-    return string.format("%.2f", os.clock())
+local function now()
+    return string.format("%.3f", os.clock())
+end
+
+local function event(gun, message)
+    if not Scanning then return end
+
+    table.insert(Events, {
+        gun = gun or "SYSTEM",
+        text = "[" .. now() .. "] " .. message
+    })
+
+    if #Events > MaxEvents then
+        table.remove(Events, 1)
+    end
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_DebugScanner"
+Gui.Name = "FarhanStoreScannerV2"
 Gui.ResetOnSpawn = false
-Gui.Parent = PlayerGui
+Gui.Parent = Player:WaitForChild("PlayerGui")
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(310, 335)
-Main.Position = UDim2.new(0, 35, 0.5, -167)
-Main.BackgroundColor3 = Color3.fromRGB(7, 15, 27)
+Main.Size = UDim2.fromOffset(320, 330)
+Main.Position = UDim2.new(0, 35, 0.5, -165)
+Main.BackgroundColor3 = Color3.fromRGB(7, 13, 25)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Parent = Gui
 
-local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 9)
-Corner.Parent = Main
+local Corner = Instance.new("UICorner", Main)
+Corner.CornerRadius = UDim.new(0, 8)
 
-local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(20, 140, 255)
+local Stroke = Instance.new("UIStroke", Main)
+Stroke.Color = Color3.fromRGB(35, 145, 255)
 Stroke.Thickness = 2
-Stroke.Parent = Main
 
-local function textObject(class, parent, size, position, value)
-    local obj = Instance.new(class)
-    obj.Size = size
-    obj.Position = position
-    obj.BackgroundTransparency = 1
-    obj.BorderSizePixel = 0
-    obj.Font = Enum.Font.Code
-    obj.TextSize = 12
-    obj.TextColor3 = Color3.fromRGB(230, 242, 255)
-    obj.Text = value or ""
-    obj.Parent = parent
-    return obj
+local function label(parent, value, pos, size, textSize)
+    local x = Instance.new("TextLabel")
+    x.BackgroundTransparency = 1
+    x.Position = pos
+    x.Size = size
+    x.Font = Enum.Font.Code
+    x.TextSize = textSize or 12
+    x.TextColor3 = Color3.fromRGB(220, 235, 255)
+    x.TextXAlignment = Enum.TextXAlignment.Left
+    x.Text = value
+    x.Parent = parent
+    return x
 end
 
-local Header = textObject(
-    "TextLabel",
+local Header = label(
     Main,
-    UDim2.new(1, -12, 0, 30),
-    UDim2.fromOffset(6, 3),
-    "FARHAN STORE | DEBUG SCANNER"
+    "FARHAN STORE | AUDIT V2",
+    UDim2.fromOffset(9, 5),
+    UDim2.new(1, -18, 0, 25),
+    14
 )
-Header.TextColor3 = Color3.fromRGB(65, 170, 255)
-Header.TextSize = 13
+Header.TextColor3 = Color3.fromRGB(55, 165, 255)
 
-local Status = textObject(
-    "TextLabel",
+local Status = label(
     Main,
-    UDim2.new(1, -16, 0, 20),
-    UDim2.fromOffset(8, 32),
-    "STATUS: IDLE"
+    "STATUS: IDLE",
+    UDim2.fromOffset(9, 32),
+    UDim2.new(1, -18, 0, 18),
+    11
 )
-Status.TextXAlignment = Enum.TextXAlignment.Left
 
-local function button(name, x, width)
-    local obj = Instance.new("TextButton")
-    obj.Size = UDim2.fromOffset(width, 27)
-    obj.Position = UDim2.fromOffset(x, 58)
-    obj.BackgroundColor3 = Color3.fromRGB(18, 70, 118)
-    obj.BorderSizePixel = 0
-    obj.Text = name
-    obj.TextColor3 = Color3.new(1, 1, 1)
-    obj.Font = Enum.Font.GothamMedium
-    obj.TextSize = 11
-    obj.Parent = Main
+local function button(name, x, y, w)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.fromOffset(w, 27)
+    b.Position = UDim2.fromOffset(x, y)
+    b.BackgroundColor3 = Color3.fromRGB(16, 66, 115)
+    b.BorderSizePixel = 0
+    b.Text = name
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamMedium
+    b.TextSize = 11
+    b.Parent = Main
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 5)
-    corner.Parent = obj
+    local c = Instance.new("UICorner", b)
+    c.CornerRadius = UDim.new(0, 5)
 
-    return obj
+    return b
 end
 
-local StartButton = button("START", 8, 65)
-local StopButton = button("STOP", 79, 65)
-local CopyButton = button("COPY LOG", 150, 82)
-local ClearButton = button("CLEAR", 238, 64)
+local Start = button("START", 8, 57, 72)
+local Stop = button("STOP", 85, 57, 72)
+local CopyAll = button("COPY ALL", 162, 57, 72)
+local Export = button("EXPORT TXT", 239, 57, 73)
+
+local Prev = button("<", 8, 91, 30)
+local Next = button(">", 282, 91, 30)
+
+local GunName = label(
+    Main,
+    "SELECTED: NONE",
+    UDim2.fromOffset(44, 94),
+    UDim2.fromOffset(233, 20),
+    11
+)
+GunName.TextXAlignment = Enum.TextXAlignment.Center
+
+local CopyGun = button("COPY CURRENT GUN", 8, 124, 147)
+local Clear = button("CLEAR DATA", 162, 124, 150)
 
 local Scroll = Instance.new("ScrollingFrame")
-Scroll.Size = UDim2.new(1, -16, 1, -100)
-Scroll.Position = UDim2.fromOffset(8, 92)
-Scroll.BackgroundColor3 = Color3.fromRGB(3, 10, 20)
+Scroll.Size = UDim2.new(1, -16, 1, -165)
+Scroll.Position = UDim2.fromOffset(8, 158)
+Scroll.BackgroundColor3 = Color3.fromRGB(3, 9, 18)
 Scroll.BorderSizePixel = 0
 Scroll.ScrollBarThickness = 3
-Scroll.ScrollBarImageColor3 = Color3.fromRGB(35, 145, 255)
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(40, 150, 255)
 Scroll.CanvasSize = UDim2.fromOffset(0, 0)
 Scroll.Parent = Main
 
-local Layout = Instance.new("UIListLayout")
-Layout.Padding = UDim.new(0, 3)
-Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Layout.Parent = Scroll
+local Output = label(
+    Scroll,
+    "Press START to scan your weapons.",
+    UDim2.fromOffset(5, 5),
+    UDim2.new(1, -12, 0, 20),
+    11
+)
+Output.TextWrapped = true
+Output.TextYAlignment = Enum.TextYAlignment.Top
+Output.AutomaticSize = Enum.AutomaticSize.Y
 
-local function addLog(message)
+local function gunNames()
+    local names = {}
+
+    for name in pairs(Reports) do
+        table.insert(names, name)
+    end
+
+    table.sort(names)
+    return names
+end
+
+local function currentReport()
+    return SelectedGun and Reports[SelectedGun]
+end
+
+local function refresh()
     if not Alive then return end
 
-    local line = "[" .. timestamp() .. "] " .. tostring(message)
-    table.insert(Logs, line)
+    local names = gunNames()
 
-    while #Logs > Config.MaxLogs do
-        table.remove(Logs, 1)
+    if not SelectedGun or not Reports[SelectedGun] then
+        SelectedGun = names[1]
     end
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -9, 0, 18)
-    label.AutomaticSize = Enum.AutomaticSize.Y
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(195, 220, 245)
-    label.Font = Enum.Font.Code
-    label.TextSize = 11
-    label.TextWrapped = true
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextYAlignment = Enum.TextYAlignment.Top
-    label.Text = line
-    label.Parent = Scroll
+    GunName.Text = SelectedGun or "NO GUN SELECTED"
 
-    local count = 0
+    local lines = {
+        "PLACE ID: " .. tostring(game.PlaceId),
+        "WEAPONS FOUND: " .. tostring(#names),
+        "EVENTS SAVED: " .. tostring(#Events),
+        "",
+    }
 
-    for _, child in ipairs(Scroll:GetChildren()) do
-        if child:IsA("TextLabel") then
-            count += 1
-            if count > Config.MaxLogs then
-                child:Destroy()
-            end
+    local r = currentReport()
+
+    if r then
+        table.insert(lines, "WEAPON: " .. r.name)
+        table.insert(lines, "SETTING: " .. tostring(r.setting))
+        table.insert(lines, "MODULES: " .. tostring(r.modules))
+        table.insert(lines, "ACTIVATED: " .. tostring(r.activated))
+        table.insert(lines, "DEACTIVATED: " .. tostring(r.deactivated))
+        table.insert(lines, "MUZZLE EVENTS: " .. tostring(r.muzzle))
+        table.insert(lines, "EQUIPPED: " .. tostring(r.equipped))
+        table.insert(lines, "UNEQUIPPED: " .. tostring(r.unequipped))
+        table.insert(lines, "")
+        table.insert(lines, "SCRIPT / MODULE OBJECTS:")
+
+        for _, obj in ipairs(r.objects) do
+            table.insert(lines, "- " .. obj)
         end
     end
+
+    Output.Text = table.concat(lines, "\n")
 
     task.defer(function()
         if not Alive then return end
         Scroll.CanvasSize = UDim2.fromOffset(
             0,
-            Layout.AbsoluteContentSize.Y + 10
-        )
-        Scroll.CanvasPosition = Vector2.new(
-            0,
-            math.max(0, Layout.AbsoluteContentSize.Y)
+            Output.AbsoluteSize.Y + 12
         )
     end)
 end
 
-local function inspectTool(tool)
-    if not Scanning or not tool:IsA("Tool") then return end
+local function getReport(tool)
+    local r = Reports[tool.Name]
 
-    addLog("TOOL: " .. tool.Name)
-    addLog("CLASS: " .. tool.ClassName)
-    addLog("ENABLED: " .. tostring(tool.Enabled))
-    addLog("REQUIRES HANDLE: " .. tostring(tool.RequiresHandle))
+    if not r then
+        r = {
+            name = tool.Name,
+            setting = false,
+            modules = 0,
+            activated = 0,
+            deactivated = 0,
+            muzzle = 0,
+            equipped = 0,
+            unequipped = 0,
+            objects = {},
+            objectMap = {}
+        }
 
-    local descendants = tool:GetDescendants()
-    addLog("DESCENDANTS: " .. tostring(#descendants))
+        Reports[tool.Name] = r
+    end
 
-    local count = 0
+    return r
+end
 
-    for _, obj in ipairs(descendants) do
-        if count >= Config.MaxChildren then
-            addLog("... remaining objects omitted")
-            break
-        end
+local function inspect(tool)
+    local r = getReport(tool)
 
-        if obj:IsA("ModuleScript")
-            or obj:IsA("LocalScript")
+    for _, obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("ModuleScript") then
+            if obj.Name == "Setting" then
+                r.setting = true
+            end
+
+            local entry = obj.ClassName .. " | " .. obj.Name
+
+            if not r.objectMap[entry] then
+                r.objectMap[entry] = true
+                table.insert(r.objects, entry)
+                r.modules += 1
+            end
+
+        elseif obj:IsA("LocalScript")
             or obj:IsA("Script")
             or obj:IsA("RemoteEvent")
-            or obj:IsA("RemoteFunction")
-            or obj:IsA("BindableEvent")
-            or obj:IsA("BindableFunction")
-            or obj:IsA("Animation") then
+            or obj:IsA("RemoteFunction") then
 
-            addLog(
-                "CHILD: "
-                .. obj.ClassName
-                .. " | "
-                .. obj:GetFullName()
-            )
+            local entry = obj.ClassName .. " | " .. obj.Name
 
-            count += 1
+            if not r.objectMap[entry] then
+                r.objectMap[entry] = true
+                table.insert(r.objects, entry)
+            end
         end
     end
+
+    refresh()
 end
 
 local function watchTool(tool)
     if not Scanning or not tool:IsA("Tool") then return end
-    if WatchedTools[tool] then return end
+    if Watched[tool] then return end
 
-    WatchedTools[tool] = true
+    Watched[tool] = true
 
-    addLog("FOUND TOOL: " .. tool.Name)
-    inspectTool(tool)
+    local r = getReport(tool)
 
-    connect(tool.Equipped, function()
-        addLog("EQUIPPED: " .. tool.Name)
-        inspectTool(tool)
+    event(tool.Name, "FOUND " .. tool.Name)
+    inspect(tool)
+
+    bind(tool.Equipped, function()
+        r.equipped += 1
+        event(tool.Name, "EQUIPPED")
+        inspect(tool)
     end, ScanConnections)
 
-    connect(tool.Unequipped, function()
-        addLog("UNEQUIPPED: " .. tool.Name)
+    bind(tool.Unequipped, function()
+        r.unequipped += 1
+        event(tool.Name, "UNEQUIPPED")
+        refresh()
     end, ScanConnections)
 
-    connect(tool.Activated, function()
-        addLog("ACTIVATED: " .. tool.Name)
+    bind(tool.Activated, function()
+        r.activated += 1
+        event(tool.Name, "ACTIVATED")
+        refresh()
     end, ScanConnections)
 
-    connect(tool.Deactivated, function()
-        addLog("DEACTIVATED: " .. tool.Name)
+    bind(tool.Deactivated, function()
+        r.deactivated += 1
+        event(tool.Name, "DEACTIVATED")
+        refresh()
     end, ScanConnections)
 
-    connect(tool:GetPropertyChangedSignal("Enabled"), function()
-        addLog(
-            "TOOL ENABLED CHANGED: "
-            .. tool.Name
-            .. " = "
-            .. tostring(tool.Enabled)
-        )
-    end, ScanConnections)
+    bind(tool.DescendantAdded, function(obj)
+        if obj:IsA("ParticleEmitter") and obj.Name == "Muzzle" then
+            r.muzzle += 1
+            event(tool.Name, "MUZZLE ADDED")
+            refresh()
 
-    connect(tool.DescendantAdded, function(obj)
-        addLog(
-            "ADDED TO "
-            .. tool.Name
-            .. ": "
-            .. obj.ClassName
-            .. " | "
-            .. obj.Name
-        )
-    end, ScanConnections)
+        elseif obj:IsA("ModuleScript")
+            or obj:IsA("LocalScript")
+            or obj:IsA("Script")
+            or obj:IsA("RemoteEvent")
+            or obj:IsA("RemoteFunction") then
 
-    connect(tool.DescendantRemoving, function(obj)
-        addLog(
-            "REMOVED FROM "
-            .. tool.Name
-            .. ": "
-            .. obj.ClassName
-            .. " | "
-            .. obj.Name
-        )
+            inspect(tool)
+        end
     end, ScanConnections)
 end
 
 local function watchContainer(container)
     if not container then return end
 
-    for _, child in ipairs(container:GetChildren()) do
-        watchTool(child)
+    for _, obj in ipairs(container:GetChildren()) do
+        watchTool(obj)
     end
 
-    connect(container.ChildAdded, function(child)
-        if child:IsA("Tool") then
-            addLog("TOOL ADDED TO " .. container.Name)
-            watchTool(child)
-        end
-    end, ScanConnections)
-
-    connect(container.ChildRemoved, function(child)
-        if child:IsA("Tool") then
-            addLog(
-                "TOOL REMOVED FROM "
-                .. container.Name
-                .. ": "
-                .. child.Name
-            )
+    bind(container.ChildAdded, function(obj)
+        if obj:IsA("Tool") then
+            watchTool(obj)
         end
     end, ScanConnections)
 end
@@ -314,98 +352,149 @@ local function startScan()
 
     Scanning = true
     Status.Text = "STATUS: SCANNING"
-    Status.TextColor3 = Color3.fromRGB(65, 200, 135)
+    Status.TextColor3 = Color3.fromRGB(65, 220, 145)
 
-    addLog("SCAN STARTED")
-    addLog("PLAYER: " .. Player.Name)
-    addLog("PLACE ID: " .. tostring(game.PlaceId))
+    table.clear(Watched)
 
-    table.clear(WatchedTools)
+    watchContainer(Player:FindFirstChild("Backpack"))
+    watchContainer(Player.Character)
 
-    local backpack = Player:FindFirstChild("Backpack")
-    local character = Player.Character
-
-    watchContainer(backpack)
-    watchContainer(character)
-
-    connect(Player.CharacterAdded, function(newCharacter)
-        addLog("CHARACTER RESPAWNED")
-        watchContainer(newCharacter)
+    bind(Player.CharacterAdded, function(character)
+        event("SYSTEM", "CHARACTER RESPAWNED")
+        watchContainer(character)
     end, ScanConnections)
 
-    connect(UIS.InputBegan, function(input, processed)
-        if processed then return end
-
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local tool = Player.Character
-                and Player.Character:FindFirstChildOfClass("Tool")
-
-            addLog(
-                "LEFT CLICK DOWN | TOOL: "
-                .. (tool and tool.Name or "NONE")
-            )
-        end
-    end, ScanConnections)
-
-    connect(UIS.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            addLog("LEFT CLICK UP")
-        end
-    end, ScanConnections)
-
-    addLog("Try equipping and firing a weapon manually")
+    event("SYSTEM", "SCAN STARTED")
+    refresh()
 end
 
 local function stopScan()
     if not Scanning then return end
 
     Scanning = false
-    disconnectAll(ScanConnections)
-    table.clear(WatchedTools)
+    disconnect(ScanConnections)
+    table.clear(Watched)
 
     Status.Text = "STATUS: STOPPED"
-    Status.TextColor3 = Color3.fromRGB(255, 190, 75)
-
-    addLog("SCAN STOPPED")
+    Status.TextColor3 = Color3.fromRGB(255, 190, 80)
+    refresh()
 end
 
-connect(StartButton.MouseButton1Click, startScan)
-connect(StopButton.MouseButton1Click, stopScan)
+local function buildReport(onlyGun)
+    local lines = {
+        "FARHAN STORE DEBUG AUDIT V2",
+        "PLACE ID: " .. tostring(game.PlaceId),
+        "WEAPONS FOUND: " .. tostring(#gunNames()),
+        ""
+    }
 
-connect(CopyButton.MouseButton1Click, function()
-    local content = table.concat(Logs, "\n")
+    for _, name in ipairs(gunNames()) do
+        if not onlyGun or onlyGun == name then
+            local r = Reports[name]
 
-    if type(setclipboard) == "function" then
-        local ok = pcall(setclipboard, content)
+            table.insert(lines, "========================")
+            table.insert(lines, "WEAPON: " .. name)
+            table.insert(lines, "SETTING FOUND: " .. tostring(r.setting))
+            table.insert(lines, "MODULE COUNT: " .. tostring(r.modules))
+            table.insert(lines, "ACTIVATED: " .. tostring(r.activated))
+            table.insert(lines, "DEACTIVATED: " .. tostring(r.deactivated))
+            table.insert(lines, "MUZZLE EVENTS: " .. tostring(r.muzzle))
+            table.insert(lines, "EQUIPPED: " .. tostring(r.equipped))
+            table.insert(lines, "UNEQUIPPED: " .. tostring(r.unequipped))
 
-        if ok then
-            addLog("LOG COPIED")
-        else
-            addLog("COPY FAILED")
+            table.insert(lines, "OBJECTS:")
+
+            for _, obj in ipairs(r.objects) do
+                table.insert(lines, "  " .. obj)
+            end
+
+            table.insert(lines, "")
         end
+    end
+
+    table.insert(lines, "EVENT LOG:")
+
+    for _, entry in ipairs(Events) do
+        if not onlyGun
+            or entry.gun == onlyGun
+            or entry.gun == "SYSTEM" then
+
+            table.insert(lines, entry.text)
+        end
+    end
+
+    return table.concat(lines, "\n")
+end
+
+bind(Start.MouseButton1Click, startScan)
+bind(Stop.MouseButton1Click, stopScan)
+
+bind(CopyAll.MouseButton1Click, function()
+    if type(setclipboard) == "function" then
+        local ok = pcall(setclipboard, buildReport())
+
+        Status.Text = ok and "STATUS: ALL COPIED" or "STATUS: COPY FAILED"
     else
-        addLog("CLIPBOARD API NOT AVAILABLE")
+        Status.Text = "STATUS: NO CLIPBOARD API"
     end
 end)
 
-connect(ClearButton.MouseButton1Click, function()
-    table.clear(Logs)
+bind(CopyGun.MouseButton1Click, function()
+    if not SelectedGun then return end
 
-    for _, child in ipairs(Scroll:GetChildren()) do
-        if child:IsA("TextLabel") then
-            child:Destroy()
-        end
+    if type(setclipboard) == "function" then
+        local ok = pcall(setclipboard, buildReport(SelectedGun))
+
+        Status.Text = ok and "STATUS: GUN COPIED" or "STATUS: COPY FAILED"
+    else
+        Status.Text = "STATUS: NO CLIPBOARD API"
+    end
+end)
+
+bind(Export.MouseButton1Click, function()
+    if type(writefile) ~= "function" then
+        Status.Text = "STATUS: EXPORT NOT SUPPORTED"
+        return
     end
 
-    Scroll.CanvasSize = UDim2.fromOffset(0, 0)
-    addLog("LOG CLEARED")
+    local filename = "Farhan_Audit_V2_" .. tostring(game.PlaceId) .. ".txt"
+    local ok = pcall(writefile, filename, buildReport())
+
+    Status.Text = ok and "STATUS: TXT EXPORTED" or "STATUS: EXPORT FAILED"
+end)
+
+bind(Clear.MouseButton1Click, function()
+    table.clear(Reports)
+    table.clear(Events)
+    SelectedGun = nil
+
+    refresh()
+    Status.Text = "STATUS: DATA CLEARED"
+end)
+
+bind(Prev.MouseButton1Click, function()
+    local names = gunNames()
+    if #names == 0 then return end
+
+    local index = table.find(names, SelectedGun) or 1
+    SelectedGun = names[((index - 2) % #names) + 1]
+    refresh()
+end)
+
+bind(Next.MouseButton1Click, function()
+    local names = gunNames()
+    if #names == 0 then return end
+
+    local index = table.find(names, SelectedGun) or 0
+    SelectedGun = names[(index % #names) + 1]
+    refresh()
 end)
 
 local Dragging = false
 local DragStart
 local OriginalPosition
 
-connect(Header.InputBegan, function(input)
+bind(Header.InputBegan, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         Dragging = true
         DragStart = input.Position
@@ -413,7 +502,7 @@ connect(Header.InputBegan, function(input)
     end
 end)
 
-connect(UIS.InputChanged, function(input)
+bind(UIS.InputChanged, function(input)
     if not Dragging then return end
 
     if input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -428,7 +517,7 @@ connect(UIS.InputChanged, function(input)
     end
 end)
 
-connect(UIS.InputEnded, function(input)
+bind(UIS.InputEnded, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         Dragging = false
     end
@@ -439,16 +528,11 @@ local function cleanup()
 
     stopScan()
     Alive = false
+    disconnect(Connections)
 
-    disconnectAll(Connections)
-
-    if Gui then
-        Gui:Destroy()
-    end
+    Gui:Destroy()
 end
 
 ENV.FarhanScannerCleanup = cleanup
 
-addLog("FARHAN DEBUG SCANNER V1 READY")
-addLog("Press START to begin")
-
+refresh()
