@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = {
-    AutoFireDelay = 0.12,
+    AutoFireDelay = 0.16,
     KillCreditWindow = 1.5,
     TargetDistance = 1000,
     KillEffectDuration = 0.55,
@@ -63,6 +63,9 @@ local DropdownOpen = false
 local RecentTargets = {}
 local GunModules = {}
 local GunStats = {Changed = 0, Checked = 0}
+local ManualFireUntil = 0
+local ManualHeld = false
+local LastAutoTarget = nil
 
 local function bind(signal, callback)
     local connection = signal:Connect(callback)
@@ -88,7 +91,7 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_BlueBlack_V4"
+Gui.Name = "FarhanStore_BlueBlack_V41"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -462,9 +465,16 @@ local function stopFire()
         pcall(function() ActiveTool:Deactivate() end)
         ActiveTool = nil
     end
+    LastAutoTarget = nil
+end
+
+local function markShotTarget()
+    local _, humanoid = getCrosshairTarget()
+    if humanoid then RecentTargets[humanoid] = os.clock() end
 end
 
 local function tryAutoFire()
+    if ManualHeld or os.clock() < ManualFireUntil then return end
     if not State.AutoFire or UIS:GetFocusedTextBox() then
         stopFire()
         return
@@ -481,15 +491,17 @@ local function tryAutoFire()
     end
     if ActiveTool and ActiveTool ~= tool then stopFire() end
     local now = os.clock()
+    if ActiveTool == tool and LastAutoTarget == humanoid then
+        return
+    end
     if now - LastFire < Config.AutoFireDelay then return end
     LastFire = now
     RecentTargets[humanoid] = now
-    -- Tool:Activate is a normal local Tool activation, not a guaranteed server shot.
-    local ok = pcall(function()
-        if ActiveTool == tool then tool:Deactivate() end
-        tool:Activate()
-    end)
-    if ok then ActiveTool = tool end
+    local ok = pcall(function() tool:Activate() end)
+    if ok then
+        ActiveTool = tool
+        LastAutoTarget = humanoid
+    end
 end
 
 local function hasKillCredit(humanoid)
@@ -629,6 +641,11 @@ bind(UIS.InputEnded, function(input)
 end)
 
 bind(UIS.InputBegan, function(input, processed)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed then
+        stopFire()
+        ManualHeld = true
+        markShotTarget()
+    end
     if processed then return end
 
     if input.KeyCode == Enum.KeyCode.RightAlt then
@@ -637,6 +654,13 @@ bind(UIS.InputBegan, function(input, processed)
         Dropdown.Visible = false
         DropdownOpen = false
         Arrow.Text = "▼"
+    end
+end)
+
+bind(UIS.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        ManualHeld = false
+        ManualFireUntil = os.clock() + 0.2
     end
 end)
 
@@ -650,6 +674,10 @@ local function watchTool(tool)
     if not tool:IsA("Tool") or WatchedTools[tool] then return end
 
     WatchedTools[tool] = true
+
+    bind(tool.Activated, function()
+        if Alive then markShotTarget() end
+    end)
 
     bind(tool.Equipped, function()
         if Alive then
@@ -772,4 +800,4 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | BLUE BLACK V4 | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
