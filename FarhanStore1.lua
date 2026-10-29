@@ -16,22 +16,30 @@ if type(ENV.FarhanFPSOnlyCleanup) == "function" then
 end
 
 local Alive = true
-local Enabled = false
+local FPS = false
+local Bright = false
 local Minimized = false
 local Generation = 0
 
 local Connections = {}
 local Saved = {}
-local QualitySaved
+local LightingSaved = {}
+local QualitySaved = nil
 
 local Queue = {}
 local QueueHead = 1
 local Queued = setmetatable({}, {__mode = "k"})
 
-local BATCH_SIZE = 30
-local BATCH_WAIT = 0.035
+local BATCH = 35
+local DELAY = 0.025
 
-local GUI, Main, Toggle, PingLabel
+local POTATO_TEXTURE = "rbxassetid://10385902758728957"
+
+local GUI
+local Main
+local FPSToggle
+local BrightToggle
+local PingLabel
 
 local function connect(signal, callback)
     local c = signal:Connect(callback)
@@ -42,21 +50,21 @@ end
 local function change(obj, prop, value)
     if not obj then return end
 
-    local ok, original = pcall(function()
+    local ok, old = pcall(function()
         return obj[prop]
     end)
 
     if not ok then return end
 
-    local record = Saved[obj]
+    local data = Saved[obj]
 
-    if not record then
-        record = {}
-        Saved[obj] = record
+    if not data then
+        data = {}
+        Saved[obj] = data
     end
 
-    if record[prop] == nil then
-        record[prop] = original
+    if data[prop] == nil then
+        data[prop] = old
     end
 
     pcall(function()
@@ -64,23 +72,66 @@ local function change(obj, prop, value)
     end)
 end
 
-local function restore()
-    for obj, properties in pairs(Saved) do
-        for prop, original in pairs(properties) do
+local function restoreObjects()
+    for obj, data in pairs(Saved) do
+        for prop, old in pairs(data) do
             pcall(function()
-                obj[prop] = original
+                obj[prop] = old
             end)
         end
     end
 
     table.clear(Saved)
+end
 
-    if QualitySaved ~= nil then
+local function captureLighting()
+    local properties = {
+        "Brightness",
+        "Ambient",
+        "OutdoorAmbient",
+        "ExposureCompensation",
+        "GlobalShadows",
+        "FogEnd",
+        "EnvironmentDiffuseScale",
+        "EnvironmentSpecularScale",
+        "ShadowSoftness"
+    }
+
+    for _, prop in ipairs(properties) do
         pcall(function()
-            settings().Rendering.QualityLevel = QualitySaved
+            LightingSaved[prop] = Lighting[prop]
         end)
+    end
+end
 
-        QualitySaved = nil
+captureLighting()
+
+local function applyLighting()
+    for prop, old in pairs(LightingSaved) do
+        pcall(function()
+            Lighting[prop] = old
+        end)
+    end
+
+    if FPS then
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            Lighting.EnvironmentDiffuseScale = 0
+            Lighting.EnvironmentSpecularScale = 0
+            Lighting.ShadowSoftness = 0
+        end)
+    end
+
+    if Bright then
+        Lighting.Brightness = math.max(
+            LightingSaved.Brightness or 1,
+            1.5
+        )
+
+        Lighting.Ambient = Color3.fromRGB(105, 105, 105)
+        Lighting.OutdoorAmbient = Color3.fromRGB(115, 115, 115)
+        Lighting.ExposureCompensation = 0
     end
 end
 
@@ -104,60 +155,18 @@ local function protected(obj)
     return false
 end
 
-local function importantObject(obj)
-    local current = obj
-
-    while current and current ~= Workspace do
-        local name = string.lower(current.Name)
-
-        if name:find("door", 1, true)
-            or name:find("floor", 1, true)
-            or name:find("ground", 1, true)
-            or name:find("wall", 1, true)
-            or name:find("stairs", 1, true)
-            or name:find("seat", 1, true)
-            or name:find("vehicle", 1, true)
-            or name:find("gun", 1, true)
-            or name:find("weapon", 1, true)
-            or name:find("shop", 1, true) then
-
-            return true
-        end
-
-        current = current.Parent
-    end
-
-    return false
-end
-
-local function canHideDecoration(obj)
-    if not obj:IsA("MeshPart") then return false end
-    if obj.CanCollide or obj.CanTouch or obj.CanQuery then
-        return false
-    end
-
-    if importantObject(obj) then return false end
-
-    if obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-        or obj:FindFirstChildWhichIsA("ClickDetector", true) then
-        return false
-    end
-
-    return true
-end
-
 local function optimize(obj)
-    if not Alive or not Enabled then return end
+    if not Alive or not FPS then return end
     if not obj or not obj.Parent then return end
     if protected(obj) then return end
 
     if obj:IsA("BasePart") then
-        change(obj, "CastShadow", false)
-        change(obj, "Reflectance", 0)
         change(obj, "Material", Enum.Material.Plastic)
+        change(obj, "Reflectance", 0)
+        change(obj, "CastShadow", false)
 
         if obj:IsA("MeshPart") then
-            change(obj, "TextureID", "")
+            change(obj, "TextureID", POTATO_TEXTURE)
 
             pcall(function()
                 change(
@@ -166,23 +175,19 @@ local function optimize(obj)
                     Enum.RenderFidelity.Performance
                 )
             end)
-
-            if canHideDecoration(obj) then
-                change(obj, "LocalTransparencyModifier", 1)
-            end
         end
 
     elseif obj:IsA("SpecialMesh") then
-        change(obj, "TextureId", "")
+        change(obj, "TextureId", POTATO_TEXTURE)
+
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        change(obj, "Transparency", 1)
 
     elseif obj:IsA("SurfaceAppearance") then
         change(obj, "ColorMap", "")
         change(obj, "NormalMap", "")
         change(obj, "MetalnessMap", "")
         change(obj, "RoughnessMap", "")
-
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        change(obj, "Transparency", 1)
 
     elseif obj:IsA("ParticleEmitter") then
         change(obj, "Enabled", false)
@@ -224,11 +229,11 @@ local function optimizeEnvironment()
         change(Terrain, "Decoration", false)
     end)
 
-    change(Lighting, "GlobalShadows", false)
-    change(Lighting, "FogEnd", 1000000000)
-    change(Lighting, "EnvironmentDiffuseScale", 0)
-    change(Lighting, "EnvironmentSpecularScale", 0)
-    change(Lighting, "ShadowSoftness", 0)
+    if type(sethiddenproperty) == "function" then
+        pcall(function()
+            sethiddenproperty(Terrain, "Decoration", false)
+        end)
+    end
 
     pcall(function()
         local rendering = settings().Rendering
@@ -239,10 +244,12 @@ local function optimizeEnvironment()
 
         rendering.QualityLevel = Enum.QualityLevel.Level01
     end)
+
+    applyLighting()
 end
 
 local function enqueue(obj)
-    if not Alive or not Enabled or not obj then return end
+    if not Alive or not FPS or not obj then return end
     if Queued[obj] then return end
 
     Queued[obj] = true
@@ -254,7 +261,7 @@ local function scan(root, token)
     local count = 0
 
     while #stack > 0 do
-        if not Alive or not Enabled or token ~= Generation then
+        if not Alive or not FPS or token ~= Generation then
             return
         end
 
@@ -272,19 +279,19 @@ local function scan(root, token)
 
         count += 1
 
-        if count >= BATCH_SIZE then
+        if count >= BATCH then
             count = 0
-            task.wait(BATCH_WAIT)
+            task.wait(DELAY)
         end
     end
 end
 
 local function worker(token)
-    while Alive and Enabled and token == Generation do
-        local processed = 0
+    while Alive and FPS and token == Generation do
+        local count = 0
 
-        while processed < BATCH_SIZE and QueueHead <= #Queue do
-            if not Alive or not Enabled or token ~= Generation then
+        while count < BATCH and QueueHead <= #Queue do
+            if not Alive or not FPS or token ~= Generation then
                 return
             end
 
@@ -297,7 +304,7 @@ local function worker(token)
                 pcall(optimize, obj)
             end
 
-            processed += 1
+            count += 1
         end
 
         if QueueHead > #Queue then
@@ -305,24 +312,36 @@ local function worker(token)
             QueueHead = 1
         end
 
-        task.wait(BATCH_WAIT)
+        task.wait(DELAY)
     end
 end
 
 local function refresh()
-    if not Toggle then return end
+    if FPSToggle then
+        FPSToggle.Text = FPS
+            and "FPS BOOST : ON"
+            or "FPS BOOST : OFF"
 
-    Toggle.Text = Enabled and "Enabled" or "Disabled"
+        FPSToggle.BackgroundColor3 = FPS
+            and Color3.fromRGB(0, 95, 210)
+            or Color3.fromRGB(26, 39, 62)
+    end
 
-    Toggle.BackgroundColor3 = Enabled
-        and Color3.fromRGB(0, 95, 210)
-        or Color3.fromRGB(27, 42, 66)
+    if BrightToggle then
+        BrightToggle.Text = Bright
+            and "FULL BRIGHT : ON"
+            or "FULL BRIGHT : OFF"
+
+        BrightToggle.BackgroundColor3 = Bright
+            and Color3.fromRGB(0, 95, 210)
+            or Color3.fromRGB(26, 39, 62)
+    end
 end
 
-local function enable()
-    if Enabled or not Alive then return end
+local function enableFPS()
+    if FPS or not Alive then return end
 
-    Enabled = true
+    FPS = true
     Generation += 1
 
     local token = Generation
@@ -335,22 +354,38 @@ local function enable()
     task.spawn(scan, Lighting, token)
 end
 
-local function disable()
-    if not Enabled then return end
+local function disableFPS()
+    if not FPS then return end
 
-    Enabled = false
+    FPS = false
     Generation += 1
 
     Queue = {}
     QueueHead = 1
     Queued = setmetatable({}, {__mode = "k"})
 
-    restore()
+    restoreObjects()
+
+    if QualitySaved ~= nil then
+        pcall(function()
+            settings().Rendering.QualityLevel = QualitySaved
+        end)
+
+        QualitySaved = nil
+    end
+
+    applyLighting()
+    refresh()
+end
+
+local function setBright(value)
+    Bright = value
+    applyLighting()
     refresh()
 end
 
 GUI = Instance.new("ScreenGui")
-GUI.Name = "FarhanStore_FPS_ONLY"
+GUI.Name = "FarhanStore_FPS_ONLY_V12"
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -358,8 +393,8 @@ GUI.Parent = PlayerGui
 
 Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(190, 125)
-Main.Position = UDim2.new(0, 25, 0.5, -62)
+Main.Size = UDim2.fromOffset(195, 155)
+Main.Position = UDim2.new(0, 25, 0.5, -77)
 Main.BackgroundColor3 = Color3.fromRGB(7, 9, 16)
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -377,10 +412,12 @@ Stroke.Parent = Main
 for i = 1, 18 do
     local star = Instance.new("Frame")
     star.Size = UDim2.fromOffset(1, 1)
+
     star.Position = UDim2.new(
         ((i * 37) % 100) / 100, 0,
         ((i * 23) % 100) / 100, 0
     )
+
     star.BackgroundColor3 = Color3.fromRGB(220, 230, 255)
     star.BackgroundTransparency = (i % 3) * 0.2
     star.BorderSizePixel = 0
@@ -389,8 +426,8 @@ end
 
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
-Title.Size = UDim2.new(1, -35, 0, 28)
-Title.Position = UDim2.fromOffset(10, 8)
+Title.Size = UDim2.new(1, -36, 0, 28)
+Title.Position = UDim2.fromOffset(10, 7)
 Title.BackgroundTransparency = 1
 Title.Text = "FarhanStore"
 Title.TextColor3 = Color3.fromRGB(245, 245, 255)
@@ -400,7 +437,6 @@ Title.ZIndex = 2
 Title.Parent = Main
 
 local Minimize = Instance.new("TextButton")
-Minimize.Name = "Minimize"
 Minimize.Size = UDim2.fromOffset(18, 18)
 Minimize.Position = UDim2.new(1, -24, 0, 9)
 Minimize.BackgroundColor3 = Color3.fromRGB(0, 91, 205)
@@ -416,27 +452,33 @@ local MinCorner = Instance.new("UICorner")
 MinCorner.CornerRadius = UDim.new(1, 0)
 MinCorner.Parent = Minimize
 
-Toggle = Instance.new("TextButton")
-Toggle.Name = "FPSBoost"
-Toggle.Size = UDim2.new(1, -48, 0, 29)
-Toggle.Position = UDim2.new(0, 24, 0, 49)
-Toggle.BackgroundColor3 = Color3.fromRGB(27, 42, 66)
-Toggle.BorderSizePixel = 0
-Toggle.Text = "Disabled"
-Toggle.TextColor3 = Color3.new(1, 1, 1)
-Toggle.TextSize = 14
-Toggle.Font = Enum.Font.GothamBold
-Toggle.ZIndex = 2
-Toggle.Parent = Main
+local function makeButton(name, y)
+    local button = Instance.new("TextButton")
+    button.Name = name
+    button.Size = UDim2.new(1, -34, 0, 29)
+    button.Position = UDim2.fromOffset(17, y)
+    button.BackgroundColor3 = Color3.fromRGB(26, 39, 62)
+    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.TextSize = 12
+    button.Font = Enum.Font.GothamBold
+    button.ZIndex = 2
+    button.Parent = Main
 
-local ToggleCorner = Instance.new("UICorner")
-ToggleCorner.CornerRadius = UDim.new(0, 7)
-ToggleCorner.Parent = Toggle
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 7)
+    corner.Parent = button
+
+    return button
+end
+
+FPSToggle = makeButton("FPSBoost", 43)
+BrightToggle = makeButton("FullBrightLow", 79)
 
 PingLabel = Instance.new("TextLabel")
 PingLabel.Name = "Ping"
 PingLabel.Size = UDim2.new(1, -20, 0, 23)
-PingLabel.Position = UDim2.new(0, 10, 0, 88)
+PingLabel.Position = UDim2.fromOffset(10, 119)
 PingLabel.BackgroundTransparency = 1
 PingLabel.Text = "PING : -- ms"
 PingLabel.TextColor3 = Color3.fromRGB(105, 190, 255)
@@ -445,28 +487,33 @@ PingLabel.Font = Enum.Font.GothamBold
 PingLabel.ZIndex = 2
 PingLabel.Parent = Main
 
-connect(Toggle.MouseButton1Click, function()
-    if Enabled then
-        disable()
+connect(FPSToggle.MouseButton1Click, function()
+    if FPS then
+        disableFPS()
     else
-        enable()
+        enableFPS()
     end
+end)
+
+connect(BrightToggle.MouseButton1Click, function()
+    setBright(not Bright)
 end)
 
 connect(Minimize.MouseButton1Click, function()
     Minimized = not Minimized
 
-    Toggle.Visible = not Minimized
+    FPSToggle.Visible = not Minimized
+    BrightToggle.Visible = not Minimized
     PingLabel.Visible = not Minimized
 
     Main.Size = Minimized
-        and UDim2.fromOffset(190, 43)
-        or UDim2.fromOffset(190, 125)
+        and UDim2.fromOffset(195, 42)
+        or UDim2.fromOffset(195, 155)
 
     Minimize.Text = Minimized and "+" or "-"
 end)
 
-connect(UIS.InputBegan, function(input, processed)
+connect(UIS.InputBegan, function(input)
     if input.KeyCode == Enum.KeyCode.RightAlt then
         GUI.Enabled = not GUI.Enabled
     end
@@ -512,11 +559,15 @@ connect(UIS.InputEnded, function(input)
 end)
 
 connect(Workspace.DescendantAdded, function(obj)
-    if Enabled then enqueue(obj) end
+    if FPS then
+        enqueue(obj)
+    end
 end)
 
 connect(Lighting.DescendantAdded, function(obj)
-    if Enabled then enqueue(obj) end
+    if FPS then
+        enqueue(obj)
+    end
 end)
 
 task.spawn(function()
@@ -544,7 +595,9 @@ end)
 local function cleanup()
     if not Alive then return end
 
-    disable()
+    disableFPS()
+    setBright(false)
+
     Alive = false
     Generation += 1
 
@@ -565,4 +618,4 @@ ENV.FarhanFPSOnlyCleanup = cleanup
 
 refresh()
 
-print("FARHAN STORE ")
+print("FARHAN STORE | EXTREME POTATO V1.2")
