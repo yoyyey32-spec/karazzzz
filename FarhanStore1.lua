@@ -15,6 +15,15 @@ if type(ENV.FarhanFPSOnlyCleanup) == "function" then
     pcall(ENV.FarhanFPSOnlyCleanup)
 end
 
+local CONFIG = {
+    FontID = 12187372382,
+    FrameBudget = 0.0025,
+    PriorityDistance = 140,
+    RemoveGunStoreWood = true,
+    HighPing = 180,
+    NetworkSafeMode = true
+}
+
 local Alive = true
 local State = "preparing"
 local Light = false
@@ -22,37 +31,47 @@ local Minimized = false
 local Generation = 0
 
 local Saved = {}
-local Fonts = {}
+local Detached = {}
 local Indexed = {}
 local Known = {}
 local Connections = {}
-local Queue = {}
-local QueueHead = 1
-local WorkerRunning = false
-local QualityOriginal
 
-local GUI, Main, FPSButton, LightButton
-local StatusLabel, PingLabel, FPSLabel
+local Queue = {}
+local Head = 1
+local Queued = {}
+local WorkerRunning = false
+
+local QualityOriginal
+local OriginalLighting = {}
+local PingValue = 0
+local CurrentFPS = 0
+
+local GUI, Main
+local FPSButton, LightButton
+local PingLabel, FPSLabel, StatusLabel
 
 local CustomFont
+
 pcall(function()
-    CustomFont = Font.fromId(12187372382)
+    CustomFont = Font.fromId(CONFIG.FontID)
 end)
 
 local function connect(signal, callback)
     local c = signal:Connect(callback)
-    table.insert(Connections, c)
+    Connections[#Connections + 1] = c
     return c
 end
 
-local function font(obj)
+local function setFont(obj)
     if CustomFont then
-        pcall(function()
+        local ok = pcall(function()
             obj.FontFace = CustomFont
         end)
-    else
-        obj.Font = Enum.Font.GothamBold
+
+        if ok then return end
     end
+
+    obj.Font = Enum.Font.GothamBold
 end
 
 local function saveSet(obj, prop, value)
@@ -65,6 +84,7 @@ local function saveSet(obj, prop, value)
     if not ok then return end
 
     local data = Saved[obj]
+
     if not data then
         data = {}
         Saved[obj] = data
@@ -80,6 +100,8 @@ local function saveSet(obj, prop, value)
 end
 
 local function isProtected(obj)
+    if not obj then return true end
+
     local character = Player.Character
 
     if character and (
@@ -97,37 +119,47 @@ local function isProtected(obj)
     return false
 end
 
-local function isGunWood(obj)
+local function gunStoreWood(obj)
+    if not CONFIG.RemoveGunStoreWood then return false end
     if not obj:IsA("BasePart") then return false end
-    if obj.CanCollide or obj.CanTouch then return false end
+
+    if not obj.Anchored then return false end
+    if obj.CanCollide or obj.CanTouch or obj.CanQuery then
+        return false
+    end
 
     local wood = false
     local store = false
-    local parent = obj
+    local current = obj
 
-    while parent and parent ~= Workspace do
-        local n = parent.Name:lower()
+    while current and current ~= Workspace do
+        local n = current.Name:lower()
 
         if n:find("door", 1, true)
             or n:find("floor", 1, true)
-            or n:find("weapon", 1, true) then
+            or n:find("weapon", 1, true)
+            or n:find("counter", 1, true)
+            or n:find("register", 1, true)
+            or n:find("handle", 1, true) then
             return false
         end
 
         if n:find("wood", 1, true)
             or n:find("plank", 1, true)
             or n:find("board", 1, true)
+            or n:find("timber", 1, true)
             or n:find("kayu", 1, true) then
             wood = true
         end
 
         if n:find("gunstore", 1, true)
             or n:find("gun store", 1, true)
-            or n:find("gunshop", 1, true) then
+            or n:find("gunshop", 1, true)
+            or n:find("gun_shop", 1, true) then
             store = true
         end
 
-        parent = parent.Parent
+        current = current.Parent
     end
 
     if obj:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -139,26 +171,37 @@ local function isGunWood(obj)
 end
 
 local function optimize(obj)
-    if State ~= "on" or not Alive then return end
+    if not Alive or State ~= "on" then return end
     if not obj or not obj.Parent then return end
     if isProtected(obj) then return end
 
     if obj:IsA("BasePart") then
+        if gunStoreWood(obj) then
+            if Detached[obj] == nil then
+                Detached[obj] = obj.Parent
+
+                pcall(function()
+                    obj.Parent = nil
+                end)
+            end
+
+            return
+        end
+
         saveSet(obj, "Material", Enum.Material.Plastic)
         saveSet(obj, "Reflectance", 0)
         saveSet(obj, "CastShadow", false)
 
         if obj:IsA("MeshPart") then
             saveSet(obj, "TextureID", "")
-            saveSet(
-                obj,
-                "RenderFidelity",
-                Enum.RenderFidelity.Performance
-            )
-        end
 
-        if isGunWood(obj) then
-            saveSet(obj, "LocalTransparencyModifier", 1)
+            pcall(function()
+                saveSet(
+                    obj,
+                    "RenderFidelity",
+                    Enum.RenderFidelity.Performance
+                )
+            end)
         end
 
     elseif obj:IsA("SpecialMesh") then
@@ -172,28 +215,35 @@ local function optimize(obj)
 
     elseif obj:IsA("Decal")
         or obj:IsA("Texture") then
+
         saveSet(obj, "Transparency", 1)
 
     elseif obj:IsA("ParticleEmitter") then
         saveSet(obj, "Enabled", false)
         saveSet(obj, "Rate", 0)
-        pcall(function() obj:Clear() end)
+
+        pcall(function()
+            obj:Clear()
+        end)
 
     elseif obj:IsA("Trail")
         or obj:IsA("Beam")
         or obj:IsA("Smoke")
         or obj:IsA("Fire")
         or obj:IsA("Sparkles") then
+
         saveSet(obj, "Enabled", false)
 
-    elseif obj:IsA("PostEffect")
-        or obj:IsA("Highlight")
+    elseif obj:IsA("Highlight")
+        or obj:IsA("PostEffect")
         or obj:IsA("Clouds") then
+
         saveSet(obj, "Enabled", false)
 
     elseif obj:IsA("PointLight")
         or obj:IsA("SpotLight")
         or obj:IsA("SurfaceLight") then
+
         saveSet(obj, "Shadows", false)
 
     elseif obj:IsA("Atmosphere") then
@@ -202,19 +252,21 @@ local function optimize(obj)
         saveSet(obj, "Glare", 0)
 
     elseif obj:IsA("Sky") then
-        for _, property in ipairs({
-            "SkyboxBk", "SkyboxDn", "SkyboxFt",
-            "SkyboxLf", "SkyboxRt", "SkyboxUp"
+        for _, prop in ipairs({
+            "SkyboxBk",
+            "SkyboxDn",
+            "SkyboxFt",
+            "SkyboxLf",
+            "SkyboxRt",
+            "SkyboxUp"
         }) do
-            saveSet(obj, property, "")
+            saveSet(obj, prop, "")
         end
 
         saveSet(obj, "CelestialBodiesShown", false)
         saveSet(obj, "StarCount", 0)
     end
 end
-
-local LightingOriginal = {}
 
 for _, prop in ipairs({
     "Brightness",
@@ -227,14 +279,14 @@ for _, prop in ipairs({
     "ShadowSoftness"
 }) do
     pcall(function()
-        LightingOriginal[prop] = Lighting[prop]
+        OriginalLighting[prop] = Lighting[prop]
     end)
 end
 
 local function applyLighting()
-    for prop, value in pairs(LightingOriginal) do
+    for prop, original in pairs(OriginalLighting) do
         pcall(function()
-            Lighting[prop] = value
+            Lighting[prop] = original
         end)
     end
 
@@ -257,68 +309,90 @@ local function applyLighting()
     end
 end
 
+local function index(obj)
+    if not obj or Known[obj] then return end
+
+    Known[obj] = true
+    Indexed[#Indexed + 1] = obj
+end
+
+local function enqueue(obj)
+    if not obj or not obj.Parent then return end
+    if Queued[obj] then return end
+
+    Queued[obj] = true
+    Queue[#Queue + 1] = obj
+end
+
+local function resetQueue()
+    Queue = {}
+    Head = 1
+    Queued = {}
+end
+
 local function refresh()
     if not FPSButton then return end
 
     FPSButton.Text = "Enabled"
+
     FPSButton.BackgroundColor3 = State == "on"
-        and Color3.fromRGB(12, 107, 230)
-        or Color3.fromRGB(23, 36, 58)
+        and Color3.fromRGB(0, 107, 239)
+        or Color3.fromRGB(20, 35, 58)
 
     LightButton.BackgroundColor3 = Light
-        and Color3.fromRGB(12, 107, 230)
-        or Color3.fromRGB(23, 36, 58)
+        and Color3.fromRGB(0, 107, 239)
+        or Color3.fromRGB(20, 35, 58)
 
-    local labels = {
-        preparing = "● PREPARING",
-        ready = "● READY",
-        on = "● POTATO ACTIVE",
-        restoring = "● RESTORING"
+    local status = {
+        preparing = "PREPARING",
+        ready = "READY",
+        on = "ULTRA POTATO ACTIVE",
+        restoring = "RESTORING"
     }
 
-    StatusLabel.Text = labels[State] or "● READY"
+    StatusLabel.Text = status[State] or "READY"
 
     StatusLabel.TextColor3 = State == "on"
-        and Color3.fromRGB(88, 220, 145)
-        or Color3.fromRGB(150, 175, 205)
-end
-
-local function enqueue(obj)
-    if not Alive or State ~= "on" then return end
-    if not obj or not obj.Parent then return end
-
-    Queue[#Queue + 1] = obj
+        and Color3.fromRGB(88, 230, 156)
+        or Color3.fromRGB(153, 175, 205)
 end
 
 local function processQueue()
     if WorkerRunning then return end
+    if State ~= "on" then return end
+
     WorkerRunning = true
+    local token = Generation
 
     task.spawn(function()
-        while Alive do
-            if State ~= "on" then
-                break
-            end
+        while Alive and State == "on" and token == Generation do
+            local started = os.clock()
 
-            local start = os.clock()
+            local budget = PingValue >= CONFIG.HighPing
+                and 0.0015
+                or CONFIG.FrameBudget
 
-            while QueueHead <= #Queue do
-                if State ~= "on" then break end
+            while Head <= #Queue do
+                if State ~= "on" or token ~= Generation then
+                    break
+                end
 
-                local obj = Queue[QueueHead]
-                Queue[QueueHead] = false
-                QueueHead += 1
+                local obj = Queue[Head]
+                Queue[Head] = false
+                Head += 1
 
-                pcall(optimize, obj)
+                if obj then
+                    Queued[obj] = nil
+                    pcall(optimize, obj)
+                end
 
-                if os.clock() - start >= 0.003 then
+                if os.clock() - started >= budget then
                     break
                 end
             end
 
-            if QueueHead > #Queue then
-                Queue = {}
-                QueueHead = 1
+            if Head > #Queue then
+                resetQueue()
                 break
             end
 
@@ -326,18 +400,15 @@ local function processQueue()
         end
 
         WorkerRunning = false
+
+        if Alive and State == "on" and Head <= #Queue then
+            task.defer(processQueue)
+        end
     end)
 end
 
-local function indexObject(obj)
-    if Known[obj] then return end
-    Known[obj] = true
-
-    Indexed[#Indexed + 1] = obj
-end
-
 local function enable()
-    if State ~= "ready" then return end
+    if State ~= "ready" or not Alive then return end
 
     State = "on"
     Generation += 1
@@ -353,35 +424,39 @@ local function enable()
 
     pcall(function()
         local rendering = settings().Rendering
-        QualityOriginal = rendering.QualityLevel
+
+        if QualityOriginal == nil then
+            QualityOriginal = rendering.QualityLevel
+        end
+
         rendering.QualityLevel = Enum.QualityLevel.Level01
     end)
 
     applyLighting()
     refresh()
+    resetQueue()
 
-    Queue = {}
-    QueueHead = 1
-
-    -- Prioritas pertama: objek dekat kamera.
     local camera = Workspace.CurrentCamera
-    local position = camera and camera.CFrame.Position
+    local cameraPosition = camera and camera.CFrame.Position
 
-    if position then
+    if cameraPosition then
         for _, obj in ipairs(Indexed) do
-            if obj:IsA("BasePart")
-                and obj.Parent
-                and (obj.Position - position).Magnitude <= 125 then
+            if obj.Parent
+                and obj:IsA("BasePart")
+                and (obj.Position - cameraPosition).Magnitude
+                    <= CONFIG.PriorityDistance then
+
                 enqueue(obj)
+
+                for _, child in ipairs(obj:GetChildren()) do
+                    enqueue(child)
+                end
             end
         end
     end
 
-    -- Lanjutkan semua objek yang sudah terindeks.
     for _, obj in ipairs(Indexed) do
-        if obj.Parent then
-            enqueue(obj)
-        end
+        enqueue(obj)
     end
 
     processQueue()
@@ -392,8 +467,6 @@ local function disable()
 
     State = "restoring"
     Generation += 1
-    Queue = {}
-    QueueHead = 1
     refresh()
 
     task.spawn(function()
@@ -401,20 +474,35 @@ local function disable()
             RunService.Heartbeat:Wait()
         end
 
-        local start = os.clock()
+        resetQueue()
+
+        local started = os.clock()
+
+        for obj, originalParent in pairs(Detached) do
+            pcall(function()
+                obj.Parent = originalParent
+            end)
+
+            Detached[obj] = nil
+
+            if os.clock() - started >= CONFIG.FrameBudget then
+                RunService.Heartbeat:Wait()
+                started = os.clock()
+            end
+        end
 
         for obj, properties in pairs(Saved) do
-            for prop, value in pairs(properties) do
+            for prop, original in pairs(properties) do
                 pcall(function()
-                    obj[prop] = value
+                    obj[prop] = original
                 end)
             end
 
             Saved[obj] = nil
 
-            if os.clock() - start >= 0.003 then
+            if os.clock() - started >= CONFIG.FrameBudget then
                 RunService.Heartbeat:Wait()
-                start = os.clock()
+                started = os.clock()
             end
         end
 
@@ -432,168 +520,167 @@ local function disable()
     end)
 end
 
-local function applyGameFont(obj)
-    if not Alive or not CustomFont then return end
-
-    if not (
-        obj:IsA("TextLabel")
-        or obj:IsA("TextButton")
-        or obj:IsA("TextBox")
-    ) then return end
-
-    if GUI and obj:IsDescendantOf(GUI) then return end
-
-    if Fonts[obj] == nil then
-        pcall(function()
-            Fonts[obj] = obj.FontFace
-        end)
-    end
-
-    pcall(function()
-        obj.FontFace = CustomFont
-    end)
-end
-
 GUI = Instance.new("ScreenGui")
-GUI.Name = "FarhanStore_V17"
+GUI.Name = "FarhanStore_UltraPotato_V18"
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GUI.Parent = PlayerGui
 
 Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(218, 185)
-Main.Position = UDim2.new(0, 25, 0.5, -92)
-Main.BackgroundColor3 = Color3.fromRGB(8, 11, 20)
+Main.Name = "Main"
+Main.Size = UDim2.fromOffset(225, 192)
+Main.Position = UDim2.new(0, 24, 0.5, -96)
+Main.BackgroundColor3 = Color3.fromRGB(7, 11, 21)
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.Parent = GUI
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 11)
-corner.Parent = Main
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = Main
 
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(210, 225, 245)
-stroke.Thickness = 1.2
-stroke.Parent = Main
+local outline = Instance.new("UIStroke")
+outline.Color = Color3.fromRGB(165, 202, 255)
+outline.Thickness = 1.3
+outline.Transparency = 0.12
+outline.Parent = Main
+
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(
+        0,
+        Color3.fromRGB(13, 23, 43)
+    ),
+    ColorSequenceKeypoint.new(
+        1,
+        Color3.fromRGB(5, 8, 17)
+    )
+})
+gradient.Rotation = 90
+gradient.Parent = Main
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 38)
-Header.BackgroundColor3 = Color3.fromRGB(12, 20, 35)
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 39)
+Header.BackgroundColor3 = Color3.fromRGB(12, 24, 45)
 Header.BorderSizePixel = 0
 Header.Parent = Main
 
 local hc = Instance.new("UICorner")
-hc.CornerRadius = UDim.new(0, 11)
+hc.CornerRadius = UDim.new(0, 12)
 hc.Parent = Header
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -45, 0, 30)
-Title.Position = UDim2.fromOffset(12, 4)
+Title.Size = UDim2.new(1, -48, 0, 30)
+Title.Position = UDim2.fromOffset(12, 5)
 Title.BackgroundTransparency = 1
 Title.RichText = true
 Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Text = '<font color="#FFFFFF">Farhan</font><font color="#168BFF">Store</font>'
 Title.TextSize = 19
-font(Title)
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Text =
+    '<font color="#FFFFFF">Farhan</font>' ..
+    '<font color="#168BFF">Store</font>'
+setFont(Title)
 Title.Parent = Header
 
 local Minimize = Instance.new("TextButton")
 Minimize.Size = UDim2.fromOffset(21, 21)
-Minimize.Position = UDim2.new(1, -30, 0, 8)
-Minimize.BackgroundColor3 = Color3.fromRGB(15, 108, 225)
+Minimize.Position = UDim2.new(1, -31, 0, 9)
+Minimize.BackgroundColor3 = Color3.fromRGB(0, 108, 232)
 Minimize.BorderSizePixel = 0
 Minimize.Text = "−"
 Minimize.TextColor3 = Color3.new(1, 1, 1)
 Minimize.TextSize = 16
-font(Minimize)
+setFont(Minimize)
 Minimize.Parent = Header
 
 local mc = Instance.new("UICorner")
 mc.CornerRadius = UDim.new(1, 0)
 mc.Parent = Minimize
 
-for i = 1, 13 do
-    local star = Instance.new("Frame")
-    star.Size = UDim2.fromOffset(1, 1)
-    star.Position = UDim2.new(
-        ((i * 37) % 100) / 100, 0,
-        ((i * 23) % 100) / 100, 0
-    )
-    star.BackgroundColor3 = Color3.fromRGB(195, 220, 255)
-    star.BackgroundTransparency = (i % 3) * 0.2
-    star.BorderSizePixel = 0
-    star.Parent = Main
-end
+local Accent = Instance.new("Frame")
+Accent.Size = UDim2.new(1, -24, 0, 2)
+Accent.Position = UDim2.fromOffset(12, 39)
+Accent.BackgroundColor3 = Color3.fromRGB(0, 117, 255)
+Accent.BorderSizePixel = 0
+Accent.Parent = Main
 
 local function makeButton(name, y)
     local b = Instance.new("TextButton")
     b.Name = name
-    b.Size = UDim2.new(1, -28, 0, 32)
+    b.Size = UDim2.new(1, -28, 0, 33)
     b.Position = UDim2.fromOffset(14, y)
-    b.BackgroundColor3 = Color3.fromRGB(23, 36, 58)
+    b.BackgroundColor3 = Color3.fromRGB(20, 35, 58)
     b.BorderSizePixel = 0
-    b.TextColor3 = Color3.fromRGB(245, 248, 255)
-    b.TextSize = 15
     b.Text = name
-    font(b)
+    b.TextColor3 = Color3.fromRGB(245, 249, 255)
+    b.TextSize = 15
+    setFont(b)
     b.Parent = Main
 
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 7)
+    c.CornerRadius = UDim.new(0, 8)
     c.Parent = b
 
     local s = Instance.new("UIStroke")
-    s.Color = Color3.fromRGB(47, 81, 130)
+    s.Color = Color3.fromRGB(48, 89, 145)
     s.Thickness = 1
     s.Parent = b
 
     return b
 end
 
-FPSButton = makeButton("Enabled", 49)
-LightButton = makeButton("Light", 88)
+FPSButton = makeButton("Enabled", 51)
+LightButton = makeButton("Light", 92)
 
 local Info = Instance.new("Frame")
-Info.Size = UDim2.new(1, -28, 0, 25)
-Info.Position = UDim2.fromOffset(14, 128)
-Info.BackgroundColor3 = Color3.fromRGB(13, 22, 38)
+Info.Size = UDim2.new(1, -28, 0, 27)
+Info.Position = UDim2.fromOffset(14, 135)
+Info.BackgroundColor3 = Color3.fromRGB(11, 22, 40)
 Info.BorderSizePixel = 0
 Info.Parent = Main
 
 local ic = Instance.new("UICorner")
-ic.CornerRadius = UDim.new(0, 5)
+ic.CornerRadius = UDim.new(0, 6)
 ic.Parent = Info
 
-PingLabel = Instance.new("TextLabel")
-PingLabel.Size = UDim2.new(0.55, 0, 1, 0)
-PingLabel.Position = UDim2.fromOffset(7, 0)
-PingLabel.BackgroundTransparency = 1
-PingLabel.Text = "PING: -- ms"
-PingLabel.TextXAlignment = Enum.TextXAlignment.Left
-PingLabel.TextColor3 = Color3.fromRGB(105, 190, 255)
-PingLabel.TextSize = 13
-font(PingLabel)
-PingLabel.Parent = Info
+local function infoLabel(text, position, size, align)
+    local l = Instance.new("TextLabel")
+    l.Size = size
+    l.Position = position
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Color3.fromRGB(112, 193, 255)
+    l.TextSize = 13
+    l.TextXAlignment = align
+    setFont(l)
+    l.Parent = Info
+    return l
+end
 
-FPSLabel = Instance.new("TextLabel")
-FPSLabel.Size = UDim2.new(0.4, -7, 1, 0)
-FPSLabel.Position = UDim2.new(0.6, 0, 0, 0)
-FPSLabel.BackgroundTransparency = 1
-FPSLabel.Text = "FPS: --"
-FPSLabel.TextXAlignment = Enum.TextXAlignment.Right
-FPSLabel.TextColor3 = Color3.fromRGB(105, 190, 255)
-FPSLabel.TextSize = 13
-font(FPSLabel)
-FPSLabel.Parent = Info
+PingLabel = infoLabel(
+    "PING: -- ms",
+    UDim2.fromOffset(7, 0),
+    UDim2.new(0.57, -7, 1, 0),
+    Enum.TextXAlignment.Left
+)
+
+FPSLabel = infoLabel(
+    "FPS: --",
+    UDim2.new(0.57, 0, 0, 0),
+    UDim2.new(0.43, -7, 1, 0),
+    Enum.TextXAlignment.Right
+)
 
 StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 20)
-StatusLabel.Position = UDim2.fromOffset(10, 158)
+StatusLabel.Size = UDim2.new(1, -20, 0, 19)
+StatusLabel.Position = UDim2.fromOffset(10, 167)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.TextSize = 11
-font(StatusLabel)
+StatusLabel.TextColor3 = Color3.fromRGB(150, 175, 205)
+setFont(StatusLabel)
 StatusLabel.Parent = Main
 
 connect(FPSButton.MouseButton1Click, function()
@@ -623,8 +710,8 @@ connect(Minimize.MouseButton1Click, function()
     StatusLabel.Visible = not Minimized
 
     Main.Size = Minimized
-        and UDim2.fromOffset(218, 38)
-        or UDim2.fromOffset(218, 185)
+        and UDim2.fromOffset(225, 39)
+        or UDim2.fromOffset(225, 192)
 
     Minimize.Text = Minimized and "+" or "−"
 end)
@@ -642,6 +729,7 @@ local StartPosition
 connect(Header.InputBegan, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
+
         Dragging = true
         DragStart = input.Position
         StartPosition = Main.Position
@@ -649,10 +737,11 @@ connect(Header.InputBegan, function(input)
 end)
 
 connect(UIS.InputChanged, function(input)
-    if Dragging and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch
-    ) then
+    if not Dragging then return end
+
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+
         local delta = input.Position - DragStart
 
         Main.Position = UDim2.new(
@@ -667,6 +756,7 @@ end)
 connect(UIS.InputEnded, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
+
         Dragging = false
     end
 end)
@@ -674,12 +764,10 @@ end)
 connect(game.DescendantAdded, function(obj)
     if not Alive then return end
 
-    applyGameFont(obj)
-
     if obj:IsDescendantOf(Workspace)
         or obj:IsDescendantOf(Lighting) then
 
-        indexObject(obj)
+        index(obj)
 
         if State == "on" then
             enqueue(obj)
@@ -688,21 +776,16 @@ connect(game.DescendantAdded, function(obj)
     end
 end)
 
--- Saat respawn, boost tidak dimatikan.
--- Streaming objek baru tetap ditangani DescendantAdded.
 connect(Player.CharacterAdded, function()
     if State ~= "on" then return end
 
-    local generation = Generation
+    local token = Generation
 
-    task.delay(0.15, function()
-        if not Alive
-            or State ~= "on"
-            or generation ~= Generation then
+    task.delay(0.1, function()
+        if not Alive or State ~= "on" or token ~= Generation then
             return
         end
 
-        -- Prioritaskan objek dekat lokasi spawn.
         local character = Player.Character
         local root = character
             and character:FindFirstChild("HumanoidRootPart")
@@ -713,7 +796,8 @@ connect(Player.CharacterAdded, function()
             if obj:IsA("BasePart")
                 and obj.Parent
                 and not isProtected(obj)
-                and (obj.Position - root.Position).Magnitude <= 110 then
+                and (obj.Position - root.Position).Magnitude <= 120 then
+
                 enqueue(obj)
             end
         end
@@ -722,58 +806,65 @@ connect(Player.CharacterAdded, function()
     end)
 end)
 
-local frames = 0
-local currentFPS = 0
-local lastFPS = os.clock()
+local Frames = 0
+local LastFPS = os.clock()
 
 connect(RunService.RenderStepped, function()
-    frames += 1
+    Frames += 1
 
     local now = os.clock()
-    local elapsed = now - lastFPS
+    local elapsed = now - LastFPS
 
     if elapsed >= 0.5 then
-        currentFPS = math.floor(frames / elapsed + 0.5)
-        frames = 0
-        lastFPS = now
+        CurrentFPS = math.floor(Frames / elapsed + 0.5)
+        Frames = 0
+        LastFPS = now
     end
 end)
 
 task.spawn(function()
     while Alive do
-        local ping = "--"
+        local pingText = "--"
 
         pcall(function()
-            local value = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
+            local item = Stats.Network.ServerStatsItem["Data Ping"]
+            local value = item:GetValueString()
             local number = tonumber(value:match("[%d%.]+"))
 
             if number then
-                ping = tostring(math.floor(number + 0.5))
+                PingValue = math.floor(number + 0.5)
+                pingText = tostring(PingValue)
             end
         end)
 
-        PingLabel.Text = "PING: " .. ping .. " ms"
-        FPSLabel.Text = "FPS: " .. currentFPS
+        if PingLabel then
+            PingLabel.Text = "PING: " .. pingText .. " ms"
+        end
+
+        if FPSLabel then
+            FPSLabel.Text = "FPS: " .. CurrentFPS
+        end
 
         task.wait(0.1)
     end
 end)
 
--- PRE-SCAN: berjalan sebelum Enabled.
 task.spawn(function()
-    local start = os.clock()
+    local started = os.clock()
 
     for _, root in ipairs({Workspace, Lighting}) do
-        indexObject(root)
+        if not Alive then return end
+
+        index(root)
 
         for _, obj in ipairs(root:GetDescendants()) do
             if not Alive then return end
 
-            indexObject(obj)
+            index(obj)
 
-            if os.clock() - start >= 0.003 then
+            if os.clock() - started >= CONFIG.FrameBudget then
                 RunService.Heartbeat:Wait()
-                start = os.clock()
+                started = os.clock()
             end
         end
     end
@@ -781,21 +872,6 @@ task.spawn(function()
     if Alive and State == "preparing" then
         State = "ready"
         refresh()
-    end
-end)
-
-task.spawn(function()
-    local start = os.clock()
-
-    for _, obj in ipairs(game:GetDescendants()) do
-        if not Alive then return end
-
-        applyGameFont(obj)
-
-        if os.clock() - start >= 0.003 then
-            RunService.Heartbeat:Wait()
-            start = os.clock()
-        end
     end
 end)
 
@@ -812,29 +888,27 @@ local function cleanup()
 
     Alive = false
     Light = false
+    Generation += 1
+
     applyLighting()
 
-    for _, connection in ipairs(Connections) do
+    for _, c in ipairs(Connections) do
         pcall(function()
-            connection:Disconnect()
-        end)
-    end
-
-    for obj, original in pairs(Fonts) do
-        pcall(function()
-            obj.FontFace = original
+            c:Disconnect()
         end)
     end
 
     table.clear(Connections)
-    table.clear(Fonts)
     table.clear(Indexed)
     table.clear(Known)
 
-    GUI:Destroy()
+    if GUI then
+        GUI:Destroy()
+    end
 end
 
 ENV.FarhanFPSOnlyCleanup = cleanup
 
 refresh()
-print("FARHAN STORE | V1.7")
+
+print("FARHAN STORE")
