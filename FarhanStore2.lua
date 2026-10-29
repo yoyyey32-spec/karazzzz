@@ -1,23 +1,21 @@
 
 local Players = game:GetService("Players")
-local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
 local TweenService = game:GetService("TweenService")
 
 local Config = {
     AutoFireDelay = 0.08,
     TargetDistance = 1000,
-    KillEffectDuration = 0.45,
+    KillEffectDuration = 0.55,
     InteractDelay = 0.01,
-    GunValue = 0.1
+    GunValue = 0.1,
+    RecoilRefresh = 0.15
 }
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
-local Camera = Workspace.CurrentCamera
 local ENV = getgenv and getgenv() or _G
 
 if type(ENV.FarhanLiteCleanup) == "function" then
@@ -25,6 +23,7 @@ if type(ENV.FarhanLiteCleanup) == "function" then
 end
 
 local Alive = true
+
 local State = {
     AutoFire = false,
     Recoil = false,
@@ -32,6 +31,14 @@ local State = {
     KillEffect = false,
     Color = "Kuning",
     Visible = true
+}
+
+local Theme = {
+    Background = Color3.fromRGB(7, 15, 27),
+    Secondary = Color3.fromRGB(15, 35, 59),
+    Blue = Color3.fromRGB(25, 135, 255),
+    Text = Color3.fromRGB(235, 245, 255),
+    Off = Color3.fromRGB(52, 72, 94)
 }
 
 local Colors = {
@@ -44,94 +51,103 @@ local Connections = {}
 local PromptSaved = {}
 local GunSaved = {}
 local WatchedTools = {}
+local WatchedHumanoids = {}
 local Buttons = {}
-local FontFace
 
-pcall(function()
-    FontFace = Font.fromId(12187372382)
-end)
+local ActiveEffect
+local ActiveTool
+local LastFire = 0
+local RecoilClock = 0
+local DropdownOpen = false
 
 local function bind(signal, callback)
     local connection = signal:Connect(callback)
-    table.insert(Connections, connection)
+    Connections[#Connections + 1] = connection
     return connection
 end
 
-local function textStyle(obj, size)
-    obj.TextSize = size
-    obj.TextColor3 = Color3.new(1, 1, 1)
-    obj.Font = Enum.Font.GothamMedium
-
-    if FontFace then
-        pcall(function()
-            obj.FontFace = FontFace
-        end)
-    end
-end
-
-local function makeCorner(parent, radius)
+local function round(object, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius)
-    corner.Parent = parent
-    return corner
+    corner.Parent = object
+end
+
+local function styleText(object, size)
+    object.Font = Enum.Font.GothamMedium
+    object.TextSize = size
+    object.TextColor3 = Theme.Text
+    object.BorderSizePixel = 0
+
+    pcall(function()
+        object.FontFace = Font.fromId(12187372382)
+    end)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_Lite_Pink"
+Gui.Name = "FarhanStore_BlueBlack_V3"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
+Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(195, 206)
-Main.Position = UDim2.new(0, 35, 0.5, -103)
-Main.BackgroundColor3 = Color3.fromRGB(36, 16, 29)
-Main.BackgroundTransparency = 0.12
+Main.Size = UDim2.fromOffset(205, 211)
+Main.Position = UDim2.new(0, 35, 0.5, -105)
+Main.BackgroundColor3 = Theme.Background
+Main.BackgroundTransparency = 0.06
 Main.BorderSizePixel = 0
+Main.Active = true
 Main.Parent = Gui
-
-makeCorner(Main, 11)
+round(Main, 10)
 
 local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(255, 55, 193)
+Stroke.Color = Theme.Blue
 Stroke.Thickness = 2
 Stroke.Parent = Main
 
-local Gradient = Instance.new("UIGradient")
-Gradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(59, 23, 43)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(27, 15, 25))
+local BackgroundGradient = Instance.new("UIGradient")
+BackgroundGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Theme.Secondary),
+    ColorSequenceKeypoint.new(1, Theme.Background)
 })
-Gradient.Rotation = 90
-Gradient.Parent = Main
+BackgroundGradient.Rotation = 90
+BackgroundGradient.Parent = Main
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 31)
+Header.BackgroundTransparency = 1
+Header.Active = true
+Header.Parent = Main
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -12, 0, 26)
-Title.Position = UDim2.fromOffset(6, 3)
+Title.Size = UDim2.new(1, -12, 1, 0)
+Title.Position = UDim2.fromOffset(6, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "Farhan Store"
+Title.TextColor3 = Color3.fromRGB(85, 180, 255)
 Title.TextStrokeTransparency = 0.65
-Title.Parent = Main
-textStyle(Title, 14)
+Title.Parent = Header
+styleText(Title, 14)
+Title.TextColor3 = Color3.fromRGB(85, 180, 255)
 
 local function makeToggle(name, y, key)
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.fromOffset(115, 26)
+    Label.Size = UDim2.fromOffset(120, 26)
     Label.Position = UDim2.fromOffset(13, y)
     Label.BackgroundTransparency = 1
     Label.Text = name
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Main
-    textStyle(Label, 12)
+    styleText(Label, 12)
 
     local Toggle = Instance.new("TextButton")
     Toggle.Size = UDim2.fromOffset(42, 21)
-    Toggle.Position = UDim2.fromOffset(140, y + 2)
-    Toggle.BackgroundColor3 = Color3.fromRGB(95, 55, 77)
+    Toggle.Position = UDim2.fromOffset(150, y + 2)
+    Toggle.BackgroundColor3 = Theme.Off
     Toggle.BorderSizePixel = 0
     Toggle.Text = ""
     Toggle.Parent = Main
-    makeCorner(Toggle, 12)
+    round(Toggle, 12)
 
     local Dot = Instance.new("Frame")
     Dot.Size = UDim2.fromOffset(15, 15)
@@ -139,18 +155,15 @@ local function makeToggle(name, y, key)
     Dot.BackgroundColor3 = Color3.new(1, 1, 1)
     Dot.BorderSizePixel = 0
     Dot.Parent = Toggle
-    makeCorner(Dot, 9)
+    round(Dot, 9)
 
-    local function refresh()
+    Buttons[key] = function()
         local on = State[key]
-
-        Toggle.BackgroundColor3 = on
-            and Color3.fromRGB(255, 45, 190)
-            or Color3.fromRGB(95, 55, 77)
+        Toggle.BackgroundColor3 = on and Theme.Blue or Theme.Off
 
         TweenService:Create(
             Dot,
-            TweenInfo.new(0.13),
+            TweenInfo.new(0.12),
             {
                 Position = on
                     and UDim2.fromOffset(24, 3)
@@ -159,51 +172,108 @@ local function makeToggle(name, y, key)
         ):Play()
     end
 
-    Buttons[key] = {
-        Button = Toggle,
-        Refresh = refresh
-    }
-
     return Toggle
 end
 
-local AutoButton = makeToggle("Auto Fire", 33, "AutoFire")
-local RecoilButton = makeToggle("No Recoil", 63, "Recoil")
-local InteractButton = makeToggle("Fast Interact", 93, "Interact")
-local KillButton = makeToggle("Kill Effect", 123, "KillEffect")
+local AutoButton = makeToggle("Auto Fire", 34, "AutoFire")
+local RecoilButton = makeToggle("No Recoil", 65, "Recoil")
+local InteractButton = makeToggle("Fast Interact", 96, "Interact")
+local KillButton = makeToggle("Kill Effect", 127, "KillEffect")
 
 local ColorLabel = Instance.new("TextLabel")
-ColorLabel.Size = UDim2.fromOffset(67, 26)
-ColorLabel.Position = UDim2.fromOffset(13, 156)
+ColorLabel.Size = UDim2.fromOffset(65, 25)
+ColorLabel.Position = UDim2.fromOffset(13, 163)
 ColorLabel.BackgroundTransparency = 1
 ColorLabel.Text = "Warna:"
 ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
 ColorLabel.Parent = Main
-textStyle(ColorLabel, 12)
+styleText(ColorLabel, 12)
 
 local ColorButton = Instance.new("TextButton")
-ColorButton.Size = UDim2.fromOffset(99, 23)
-ColorButton.Position = UDim2.fromOffset(83, 157)
-ColorButton.BackgroundColor3 = Color3.fromRGB(76, 39, 52)
+ColorButton.Size = UDim2.fromOffset(109, 24)
+ColorButton.Position = UDim2.fromOffset(83, 163)
+ColorButton.BackgroundColor3 = Theme.Secondary
+ColorButton.Text = ""
 ColorButton.BorderSizePixel = 0
 ColorButton.Parent = Main
-makeCorner(ColorButton, 7)
-textStyle(ColorButton, 11)
+round(ColorButton, 6)
+
+local ColorStroke = Instance.new("UIStroke")
+ColorStroke.Color = Color3.fromRGB(36, 104, 171)
+ColorStroke.Thickness = 1
+ColorStroke.Parent = ColorButton
 
 local ColorDot = Instance.new("Frame")
-ColorDot.Size = UDim2.fromOffset(11, 11)
-ColorDot.Position = UDim2.fromOffset(8, 6)
+ColorDot.Size = UDim2.fromOffset(10, 10)
+ColorDot.Position = UDim2.fromOffset(8, 7)
 ColorDot.BorderSizePixel = 0
 ColorDot.Parent = ColorButton
-makeCorner(ColorDot, 7)
+round(ColorDot, 6)
 
-local ColorOrder = {"Kuning", "Biru", "Merah"}
-local ColorIndex = 1
+local SelectedLabel = Instance.new("TextLabel")
+SelectedLabel.Size = UDim2.fromOffset(64, 24)
+SelectedLabel.Position = UDim2.fromOffset(22, 0)
+SelectedLabel.BackgroundTransparency = 1
+SelectedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SelectedLabel.Parent = ColorButton
+styleText(SelectedLabel, 11)
+
+local Arrow = Instance.new("TextLabel")
+Arrow.Size = UDim2.fromOffset(19, 24)
+Arrow.Position = UDim2.fromOffset(88, 0)
+Arrow.BackgroundTransparency = 1
+Arrow.Text = "▼"
+Arrow.Parent = ColorButton
+styleText(Arrow, 10)
+
+local Dropdown = Instance.new("Frame")
+Dropdown.Size = UDim2.fromOffset(109, 81)
+Dropdown.Position = UDim2.fromOffset(83, 190)
+Dropdown.BackgroundColor3 = Theme.Background
+Dropdown.BorderSizePixel = 0
+Dropdown.Visible = false
+Dropdown.ZIndex = 10
+Dropdown.Parent = Main
+round(Dropdown, 6)
+
+local DropdownStroke = Instance.new("UIStroke")
+DropdownStroke.Color = Theme.Blue
+DropdownStroke.Thickness = 1
+DropdownStroke.Parent = Dropdown
 
 local function refreshColor()
-    ColorButton.Text = "    " .. State.Color .. "  ▾"
+    SelectedLabel.Text = State.Color
     ColorDot.BackgroundColor3 = Colors[State.Color]
 end
+
+for index, name in ipairs({"Kuning", "Biru", "Merah"}) do
+    local Option = Instance.new("TextButton")
+    Option.Size = UDim2.new(1, -6, 0, 25)
+    Option.Position = UDim2.fromOffset(3, (index - 1) * 26 + 2)
+    Option.BackgroundColor3 = Theme.Secondary
+    Option.BackgroundTransparency = 0.25
+    Option.Text = "●  " .. name
+    Option.TextColor3 = Colors[name]
+    Option.ZIndex = 11
+    Option.Parent = Dropdown
+    styleText(Option, 11)
+    Option.TextColor3 = Colors[name]
+    round(Option, 4)
+
+    bind(Option.MouseButton1Click, function()
+        State.Color = name
+        DropdownOpen = false
+        Dropdown.Visible = false
+        Arrow.Text = "▼"
+        refreshColor()
+    end)
+end
+
+bind(ColorButton.MouseButton1Click, function()
+    DropdownOpen = not DropdownOpen
+    Dropdown.Visible = DropdownOpen
+    Arrow.Text = DropdownOpen and "▲" or "▼"
+end)
 
 local Effect = Instance.new("Frame")
 Effect.Name = "KillEffect"
@@ -223,8 +293,6 @@ EffectGradient.Transparency = NumberSequence.new({
     NumberSequenceKeypoint.new(1, 0)
 })
 EffectGradient.Parent = Effect
-
-local ActiveEffect
 
 local function playKillEffect()
     if not Alive or not State.KillEffect then return end
@@ -253,7 +321,7 @@ local function playKillEffect()
     ActiveEffect:Play()
 end
 
-local RecoilKeys = {
+local GunKeys = {
     "Recoil", "RecoilAmount", "CameraRecoil",
     "CameraShake", "Kick", "Kickback",
     "VerticalRecoil", "HorizontalRecoil",
@@ -265,37 +333,29 @@ local RecoilKeys = {
     "AimSpread", "SpreadAmount", "Bloom"
 }
 
-local function restoreGuns()
-    for module, properties in pairs(GunSaved) do
-        for key, original in pairs(properties) do
-            pcall(function()
-                module[key] = original
-            end)
-        end
-        GunSaved[module] = nil
-    end
-end
-
 local function applyGun(tool)
-    if not State.Recoil or not tool:IsA("Tool") then return end
+    if not Alive or not State.Recoil then return end
+    if not tool or not tool:IsA("Tool") then return end
 
-    local setting = tool:FindFirstChild("Setting", true)
-    if not setting or not setting:IsA("ModuleScript") then return end
+    for _, setting in ipairs(tool:GetDescendants()) do
+        if setting:IsA("ModuleScript") and setting.Name == "Setting" then
+            local ok, module = pcall(require, setting)
 
-    local ok, module = pcall(require, setting)
-    if not ok or type(module) ~= "table" then return end
+            if ok and type(module) == "table" then
+                GunSaved[module] = GunSaved[module] or {}
 
-    GunSaved[module] = GunSaved[module] or {}
+                for _, key in ipairs(GunKeys) do
+                    local value = module[key]
 
-    for _, key in ipairs(RecoilKeys) do
-        local value = module[key]
+                    if type(value) == "number" then
+                        if GunSaved[module][key] == nil then
+                            GunSaved[module][key] = value
+                        end
 
-        if type(value) == "number" then
-            if GunSaved[module][key] == nil then
-                GunSaved[module][key] = value
+                        module[key] = Config.GunValue
+                    end
+                end
             end
-
-            module[key] = Config.GunValue
         end
     end
 end
@@ -306,21 +366,38 @@ local function applyAllGuns()
     local character = Player.Character
     local backpack = Player:FindFirstChild("Backpack")
 
-    for _, root in ipairs({character, backpack}) do
-        if root then
-            for _, obj in ipairs(root:GetChildren()) do
-                if obj:IsA("Tool") then
-                    pcall(applyGun, obj)
-                end
+    if character then
+        for _, obj in ipairs(character:GetChildren()) do
+            if obj:IsA("Tool") then
+                pcall(applyGun, obj)
+            end
+        end
+    end
+
+    if backpack then
+        for _, obj in ipairs(backpack:GetChildren()) do
+            if obj:IsA("Tool") then
+                pcall(applyGun, obj)
             end
         end
     end
 end
 
-local function fastPrompt(prompt)
-    if not State.Interact or not prompt:IsA("ProximityPrompt") then
-        return
+local function restoreGuns()
+    for module, properties in pairs(GunSaved) do
+        for key, original in pairs(properties) do
+            pcall(function()
+                module[key] = original
+            end)
+        end
+
+        GunSaved[module] = nil
     end
+end
+
+local function fastPrompt(prompt)
+    if not State.Interact then return end
+    if not prompt:IsA("ProximityPrompt") then return end
 
     if PromptSaved[prompt] == nil then
         PromptSaved[prompt] = prompt.HoldDuration
@@ -336,6 +413,7 @@ local function restorePrompts()
         pcall(function()
             prompt.HoldDuration = original
         end)
+
         PromptSaved[prompt] = nil
     end
 end
@@ -348,12 +426,12 @@ local function getEquippedTool()
 end
 
 local function getCrosshairTarget()
-    Camera = Workspace.CurrentCamera
-    if not Camera then return nil end
+    local camera = Workspace.CurrentCamera
+    if not camera then return nil end
 
     local character = Player.Character
-    local center = Camera.ViewportSize / 2
-    local ray = Camera:ViewportPointToRay(center.X, center.Y)
+    local center = camera.ViewportSize / 2
+    local ray = camera:ViewportPointToRay(center.X, center.Y)
 
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
@@ -368,30 +446,158 @@ local function getCrosshairTarget()
 
     if not result then return nil end
 
-    local model = result.Instance:FindFirstAncestorOfClass("Model")
-    if not model then return nil end
+    local current = result.Instance
 
-    local targetPlayer = Players:GetPlayerFromCharacter(model)
-    if not targetPlayer or targetPlayer == Player then return nil end
+    while current and current ~= Workspace do
+        if current:IsA("Model") then
+            local humanoid = current:FindFirstChildOfClass("Humanoid")
 
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return nil end
+            if humanoid then
+                local target = Players:GetPlayerFromCharacter(current)
 
-    return targetPlayer, humanoid
+                if target
+                    and target ~= Player
+                    and humanoid.Health > 0 then
+
+                    return target, humanoid
+                end
+
+                return nil
+            end
+        end
+
+        current = current.Parent
+    end
+
+    return nil
 end
 
-local function fireWeapon(tool)
+local function stopFire()
+    if ActiveTool then
+        pcall(function()
+            ActiveTool:Deactivate()
+        end)
+
+        ActiveTool = nil
+    end
+end
+
+local function tryAutoFire()
+    if not State.AutoFire then
+        stopFire()
+        return
+    end
+
+    if UIS:GetFocusedTextBox() then
+        stopFire()
+        return
+    end
+
+    if UIS.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+        stopFire()
+        return
+    end
+
+    local tool = getEquippedTool()
+
+    if not tool or not tool.Enabled then
+        stopFire()
+        return
+    end
+
+    local target = getCrosshairTarget()
+
+    if not target then
+        stopFire()
+        return
+    end
+
+    if ActiveTool and ActiveTool ~= tool then
+        stopFire()
+    end
+
+    local now = os.clock()
+
+    if now - LastFire < Config.AutoFireDelay then
+        return
+    end
+
+    LastFire = now
+
+    pcall(function()
+        tool:Deactivate()
+        tool:Activate()
+    end)
+
+    ActiveTool = tool
+end
+
+local function hasKillCredit(humanoid)
+    for _, name in ipairs({
+        "creator", "Creator", "killer", "Killer"
+    }) do
+        local tag = humanoid:FindFirstChild(name)
+
+        if tag and tag:IsA("ObjectValue") and tag.Value == Player then
+            return true
+        end
+    end
+
     return false
 end
 
+local function watchHumanoid(humanoid)
+    if WatchedHumanoids[humanoid] then return end
+    WatchedHumanoids[humanoid] = true
+
+    bind(humanoid.Died, function()
+        if not Alive or not State.KillEffect then return end
+
+        if hasKillCredit(humanoid) then
+            playKillEffect()
+        end
+    end)
+end
+
+local function watchPlayer(targetPlayer)
+    if targetPlayer == Player then return end
+
+    local function watchCharacter(character)
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+            or character:WaitForChild("Humanoid", 10)
+
+        if Alive and humanoid then
+            watchHumanoid(humanoid)
+        end
+    end
+
+    bind(targetPlayer.CharacterAdded, watchCharacter)
+
+    if targetPlayer.Character then
+        task.defer(watchCharacter, targetPlayer.Character)
+    end
+end
+
+for _, targetPlayer in ipairs(Players:GetPlayers()) do
+    watchPlayer(targetPlayer)
+end
+
+bind(Players.PlayerAdded, watchPlayer)
+
 local function refreshButtons()
-    for _, item in pairs(Buttons) do
-        item.Refresh()
+    for _, refresh in pairs(Buttons) do
+        refresh()
     end
 end
 
 bind(AutoButton.MouseButton1Click, function()
     State.AutoFire = not State.AutoFire
+
+    if not State.AutoFire then
+        stopFire()
+    end
+
+    LastFire = 0
     refreshButtons()
 end)
 
@@ -428,17 +634,11 @@ bind(KillButton.MouseButton1Click, function()
     refreshButtons()
 end)
 
-bind(ColorButton.MouseButton1Click, function()
-    ColorIndex = ColorIndex % #ColorOrder + 1
-    State.Color = ColorOrder[ColorIndex]
-    refreshColor()
-end)
-
 local Dragging = false
 local DragStart
 local StartPosition
 
-bind(Main.InputBegan, function(input)
+bind(Header.InputBegan, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
 
@@ -479,27 +679,44 @@ bind(UIS.InputBegan, function(input, processed)
     if input.KeyCode == Enum.KeyCode.RightAlt then
         State.Visible = not State.Visible
         Main.Visible = State.Visible
+        Dropdown.Visible = false
+        DropdownOpen = false
+        Arrow.Text = "▼"
     end
 end)
 
 bind(Workspace.DescendantAdded, function(obj)
-    if not Alive then return end
-
-    if State.Interact and obj:IsA("ProximityPrompt") then
+    if Alive and State.Interact and obj:IsA("ProximityPrompt") then
         fastPrompt(obj)
     end
 end)
 
 local function watchTool(tool)
     if not tool:IsA("Tool") or WatchedTools[tool] then return end
+
     WatchedTools[tool] = true
 
-    bind(tool.DescendantAdded, function(obj)
-        if Alive and obj:IsA("ModuleScript") and obj.Name == "Setting" then
+    bind(tool.Equipped, function()
+        if Alive then
             task.defer(function()
-                if Alive then
-                    applyGun(tool)
-                end
+                applyGun(tool)
+            end)
+        end
+    end)
+
+    bind(tool.Unequipped, function()
+        if ActiveTool == tool then
+            stopFire()
+        end
+    end)
+
+    bind(tool.DescendantAdded, function(obj)
+        if Alive
+            and obj:IsA("ModuleScript")
+            and obj.Name == "Setting" then
+
+            task.defer(function()
+                applyGun(tool)
             end)
         end
     end)
@@ -512,7 +729,19 @@ local function watchTool(tool)
 end
 
 local function watchCharacter(character)
-    bind(character.ChildAdded, watchTool)
+    stopFire()
+
+    bind(character.ChildAdded, function(child)
+        if child:IsA("Tool") then
+            watchTool(child)
+
+            if State.Recoil then
+                task.defer(function()
+                    applyGun(child)
+                end)
+            end
+        end
+    end)
 
     for _, child in ipairs(character:GetChildren()) do
         watchTool(child)
@@ -526,40 +755,29 @@ end
 bind(Player.CharacterAdded, watchCharacter)
 
 local Backpack = Player:WaitForChild("Backpack")
-bind(Backpack.ChildAdded, watchTool)
+
+bind(Backpack.ChildAdded, function(child)
+    watchTool(child)
+end)
 
 for _, child in ipairs(Backpack:GetChildren()) do
     watchTool(child)
 end
 
-local FireClock = 0
-local GunClock = 0
-
 bind(RunService.Heartbeat, function(dt)
     if not Alive then return end
 
-    FireClock += dt
-    GunClock += dt
+    RecoilClock += dt
 
-    if GunClock >= 0.5 then
-        GunClock = 0
-        applyAllGuns()
-    end
+    if RecoilClock >= Config.RecoilRefresh then
+        RecoilClock = 0
 
-    if FireClock >= Config.AutoFireDelay then
-        FireClock = 0
-
-        if State.AutoFire
-            and not UIS:GetFocusedTextBox()
-            and getEquippedTool() then
-
-            local target = getCrosshairTarget()
-
-            if target then
-                fireWeapon(getEquippedTool())
-            end
+        if State.Recoil then
+            applyAllGuns()
         end
     end
+
+    tryAutoFire()
 end)
 
 local function cleanup()
@@ -571,6 +789,7 @@ local function cleanup()
     State.Interact = false
     State.KillEffect = false
 
+    stopFire()
     restoreGuns()
     restorePrompts()
 
@@ -584,6 +803,8 @@ local function cleanup()
         end)
     end
 
+    table.clear(Connections)
+
     if Gui then
         Gui:Destroy()
     end
@@ -595,4 +816,4 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | LITE PINK")
+print("FARHAN STORE | BLUE BLACK V3")
