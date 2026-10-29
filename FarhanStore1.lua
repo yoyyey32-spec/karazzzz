@@ -3,7 +3,7 @@ local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -19,21 +19,19 @@ local Alive = true
 local Enabled = false
 local Minimized = false
 local Generation = 0
-local WorkerRunning = false
 
 local Connections = {}
 local Saved = {}
+local QualitySaved
+
 local Queue = {}
+local QueueHead = 1
 local Queued = setmetatable({}, {__mode = "k"})
 
-local QualitySaved
-local GUI
-local Main
-local Toggle
-local Minimize
-
-local BATCH_SIZE = 35
+local BATCH_SIZE = 30
 local BATCH_WAIT = 0.035
+
+local GUI, Main, Toggle, PingLabel
 
 local function connect(signal, callback)
     local c = signal:Connect(callback)
@@ -41,11 +39,11 @@ local function connect(signal, callback)
     return c
 end
 
-local function change(obj, property, value)
+local function change(obj, prop, value)
     if not obj then return end
 
     local ok, original = pcall(function()
-        return obj[property]
+        return obj[prop]
     end)
 
     if not ok then return end
@@ -57,20 +55,20 @@ local function change(obj, property, value)
         Saved[obj] = record
     end
 
-    if record[property] == nil then
-        record[property] = original
+    if record[prop] == nil then
+        record[prop] = original
     end
 
     pcall(function()
-        obj[property] = value
+        obj[prop] = value
     end)
 end
 
 local function restore()
     for obj, properties in pairs(Saved) do
-        for property, value in pairs(properties) do
+        for prop, original in pairs(properties) do
             pcall(function()
-                obj[property] = value
+                obj[prop] = original
             end)
         end
     end
@@ -86,14 +84,11 @@ local function restore()
     end
 end
 
-local function protectedObject(obj)
+local function protected(obj)
     if not obj then return true end
 
-    if obj:FindFirstAncestorOfClass("Tool") then
-        return true
-    end
-
-    if obj:FindFirstAncestorOfClass("Accessory") then
+    if obj:FindFirstAncestorOfClass("Tool")
+        or obj:FindFirstAncestorOfClass("Accessory") then
         return true
     end
 
@@ -109,11 +104,52 @@ local function protectedObject(obj)
     return false
 end
 
+local function importantObject(obj)
+    local current = obj
+
+    while current and current ~= Workspace do
+        local name = string.lower(current.Name)
+
+        if name:find("door", 1, true)
+            or name:find("floor", 1, true)
+            or name:find("ground", 1, true)
+            or name:find("wall", 1, true)
+            or name:find("stairs", 1, true)
+            or name:find("seat", 1, true)
+            or name:find("vehicle", 1, true)
+            or name:find("gun", 1, true)
+            or name:find("weapon", 1, true)
+            or name:find("shop", 1, true) then
+
+            return true
+        end
+
+        current = current.Parent
+    end
+
+    return false
+end
+
+local function canHideDecoration(obj)
+    if not obj:IsA("MeshPart") then return false end
+    if obj.CanCollide or obj.CanTouch or obj.CanQuery then
+        return false
+    end
+
+    if importantObject(obj) then return false end
+
+    if obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+        or obj:FindFirstChildWhichIsA("ClickDetector", true) then
+        return false
+    end
+
+    return true
+end
+
 local function optimize(obj)
     if not Alive or not Enabled then return end
     if not obj or not obj.Parent then return end
-
-    if protectedObject(obj) then return end
+    if protected(obj) then return end
 
     if obj:IsA("BasePart") then
         change(obj, "CastShadow", false)
@@ -130,6 +166,10 @@ local function optimize(obj)
                     Enum.RenderFidelity.Performance
                 )
             end)
+
+            if canHideDecoration(obj) then
+                change(obj, "LocalTransparencyModifier", 1)
+            end
         end
 
     elseif obj:IsA("SpecialMesh") then
@@ -141,9 +181,7 @@ local function optimize(obj)
         change(obj, "MetalnessMap", "")
         change(obj, "RoughnessMap", "")
 
-    elseif obj:IsA("Decal")
-        or obj:IsA("Texture") then
-
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
         change(obj, "Transparency", 1)
 
     elseif obj:IsA("ParticleEmitter") then
@@ -168,18 +206,15 @@ local function optimize(obj)
 
         change(obj, "Shadows", false)
 
-    elseif obj:IsA("Highlight") then
-        change(obj, "Enabled", false)
+    elseif obj:IsA("Highlight")
+        or obj:IsA("PostEffect")
+        or obj:IsA("Clouds") then
 
-    elseif obj:IsA("PostEffect") then
-        change(obj, "Enabled", false)
-
-    elseif obj:IsA("Clouds") then
         change(obj, "Enabled", false)
     end
 end
 
-local function environment()
+local function optimizeEnvironment()
     change(Terrain, "WaterWaveSize", 0)
     change(Terrain, "WaterWaveSpeed", 0)
     change(Terrain, "WaterReflectance", 0)
@@ -207,66 +242,19 @@ local function environment()
 end
 
 local function enqueue(obj)
-    if not Alive or not Enabled or not obj then
-        return
-    end
-
+    if not Alive or not Enabled or not obj then return end
     if Queued[obj] then return end
 
     Queued[obj] = true
     Queue[#Queue + 1] = obj
 end
 
-local function worker()
-    if WorkerRunning then return end
-
-    WorkerRunning = true
-
-    while Alive do
-        if not Enabled then break end
-
-        local token = Generation
-        local processed = 0
-
-        while processed < BATCH_SIZE and #Queue > 0 do
-            if not Alive
-                or not Enabled
-                or token ~= Generation then
-                break
-            end
-
-            local obj = table.remove(Queue)
-
-            if obj then
-                Queued[obj] = nil
-                pcall(optimize, obj)
-            end
-
-            processed += 1
-        end
-
-        if #Queue == 0 then
-            break
-        end
-
-        task.wait(BATCH_WAIT)
-    end
-
-    WorkerRunning = false
-
-    if Alive and Enabled and #Queue > 0 then
-        task.defer(worker)
-    end
-end
-
-local function scanTree(root, token)
+local function scan(root, token)
     local stack = {root}
     local count = 0
 
     while #stack > 0 do
-        if not Alive
-            or not Enabled
-            or token ~= Generation then
+        if not Alive or not Enabled or token ~= Generation then
             return
         end
 
@@ -291,14 +279,44 @@ local function scanTree(root, token)
     end
 end
 
+local function worker(token)
+    while Alive and Enabled and token == Generation do
+        local processed = 0
+
+        while processed < BATCH_SIZE and QueueHead <= #Queue do
+            if not Alive or not Enabled or token ~= Generation then
+                return
+            end
+
+            local obj = Queue[QueueHead]
+            Queue[QueueHead] = false
+            QueueHead += 1
+
+            if obj then
+                Queued[obj] = nil
+                pcall(optimize, obj)
+            end
+
+            processed += 1
+        end
+
+        if QueueHead > #Queue then
+            Queue = {}
+            QueueHead = 1
+        end
+
+        task.wait(BATCH_WAIT)
+    end
+end
+
 local function refresh()
     if not Toggle then return end
 
     Toggle.Text = Enabled and "Enabled" or "Disabled"
 
     Toggle.BackgroundColor3 = Enabled
-        and Color3.fromRGB(7, 75, 158)
-        or Color3.fromRGB(24, 39, 65)
+        and Color3.fromRGB(0, 95, 210)
+        or Color3.fromRGB(27, 42, 66)
 end
 
 local function enable()
@@ -309,26 +327,12 @@ local function enable()
 
     local token = Generation
 
-    environment()
+    optimizeEnvironment()
     refresh()
 
-    task.spawn(function()
-        scanTree(Workspace, token)
-    end)
-
-    task.spawn(function()
-        scanTree(Lighting, token)
-    end)
-
-    task.spawn(function()
-        while Alive and Enabled and token == Generation do
-            if #Queue > 0 and not WorkerRunning then
-                worker()
-            end
-
-            task.wait(0.1)
-        end
-    end)
+    task.spawn(worker, token)
+    task.spawn(scan, Workspace, token)
+    task.spawn(scan, Lighting, token)
 end
 
 local function disable()
@@ -337,8 +341,9 @@ local function disable()
     Enabled = false
     Generation += 1
 
-    table.clear(Queue)
-    table.clear(Queued)
+    Queue = {}
+    QueueHead = 1
+    Queued = setmetatable({}, {__mode = "k"})
 
     restore()
     refresh()
@@ -353,8 +358,8 @@ GUI.Parent = PlayerGui
 
 Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(180, 105)
-Main.Position = UDim2.new(0, 25, 0.5, -52)
+Main.Size = UDim2.fromOffset(190, 125)
+Main.Position = UDim2.new(0, 25, 0.5, -62)
 Main.BackgroundColor3 = Color3.fromRGB(7, 9, 16)
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -366,20 +371,17 @@ Corner.Parent = Main
 
 local Stroke = Instance.new("UIStroke")
 Stroke.Color = Color3.fromRGB(235, 238, 245)
-Stroke.Thickness = 1.5
+Stroke.Thickness = 1.4
 Stroke.Parent = Main
 
-for i = 1, 17 do
+for i = 1, 18 do
     local star = Instance.new("Frame")
-    star.Name = "Star" .. i
     star.Size = UDim2.fromOffset(1, 1)
-
     star.Position = UDim2.new(
         ((i * 37) % 100) / 100, 0,
         ((i * 23) % 100) / 100, 0
     )
-
-    star.BackgroundColor3 = Color3.fromRGB(220, 225, 245)
+    star.BackgroundColor3 = Color3.fromRGB(220, 230, 255)
     star.BackgroundTransparency = (i % 3) * 0.2
     star.BorderSizePixel = 0
     star.Parent = Main
@@ -387,8 +389,8 @@ end
 
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
-Title.Size = UDim2.new(1, -28, 0, 35)
-Title.Position = UDim2.fromOffset(10, 10)
+Title.Size = UDim2.new(1, -35, 0, 28)
+Title.Position = UDim2.fromOffset(10, 8)
 Title.BackgroundTransparency = 1
 Title.Text = "FarhanStore"
 Title.TextColor3 = Color3.fromRGB(245, 245, 255)
@@ -397,10 +399,10 @@ Title.Font = Enum.Font.GothamBold
 Title.ZIndex = 2
 Title.Parent = Main
 
-Minimize = Instance.new("TextButton")
+local Minimize = Instance.new("TextButton")
 Minimize.Name = "Minimize"
 Minimize.Size = UDim2.fromOffset(18, 18)
-Minimize.Position = UDim2.new(1, -23, 0, 9)
+Minimize.Position = UDim2.new(1, -24, 0, 9)
 Minimize.BackgroundColor3 = Color3.fromRGB(0, 91, 205)
 Minimize.Text = "-"
 Minimize.TextColor3 = Color3.new(1, 1, 1)
@@ -416,12 +418,12 @@ MinCorner.Parent = Minimize
 
 Toggle = Instance.new("TextButton")
 Toggle.Name = "FPSBoost"
-Toggle.Size = UDim2.new(1, -48, 0, 30)
-Toggle.Position = UDim2.new(0, 24, 0, 57)
-Toggle.BackgroundColor3 = Color3.fromRGB(24, 39, 65)
+Toggle.Size = UDim2.new(1, -48, 0, 29)
+Toggle.Position = UDim2.new(0, 24, 0, 49)
+Toggle.BackgroundColor3 = Color3.fromRGB(27, 42, 66)
 Toggle.BorderSizePixel = 0
 Toggle.Text = "Disabled"
-Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+Toggle.TextColor3 = Color3.new(1, 1, 1)
 Toggle.TextSize = 14
 Toggle.Font = Enum.Font.GothamBold
 Toggle.ZIndex = 2
@@ -430,6 +432,18 @@ Toggle.Parent = Main
 local ToggleCorner = Instance.new("UICorner")
 ToggleCorner.CornerRadius = UDim.new(0, 7)
 ToggleCorner.Parent = Toggle
+
+PingLabel = Instance.new("TextLabel")
+PingLabel.Name = "Ping"
+PingLabel.Size = UDim2.new(1, -20, 0, 23)
+PingLabel.Position = UDim2.new(0, 10, 0, 88)
+PingLabel.BackgroundTransparency = 1
+PingLabel.Text = "PING : -- ms"
+PingLabel.TextColor3 = Color3.fromRGB(105, 190, 255)
+PingLabel.TextSize = 15
+PingLabel.Font = Enum.Font.GothamBold
+PingLabel.ZIndex = 2
+PingLabel.Parent = Main
 
 connect(Toggle.MouseButton1Click, function()
     if Enabled then
@@ -443,12 +457,19 @@ connect(Minimize.MouseButton1Click, function()
     Minimized = not Minimized
 
     Toggle.Visible = not Minimized
+    PingLabel.Visible = not Minimized
 
     Main.Size = Minimized
-        and UDim2.fromOffset(180, 43)
-        or UDim2.fromOffset(180, 105)
+        and UDim2.fromOffset(190, 43)
+        or UDim2.fromOffset(190, 125)
 
     Minimize.Text = Minimized and "+" or "-"
+end)
+
+connect(UIS.InputBegan, function(input, processed)
+    if input.KeyCode == Enum.KeyCode.RightAlt then
+        GUI.Enabled = not GUI.Enabled
+    end
 end)
 
 local Dragging = false
@@ -491,14 +512,32 @@ connect(UIS.InputEnded, function(input)
 end)
 
 connect(Workspace.DescendantAdded, function(obj)
-    if Enabled then
-        enqueue(obj)
-    end
+    if Enabled then enqueue(obj) end
 end)
 
 connect(Lighting.DescendantAdded, function(obj)
-    if Enabled then
-        enqueue(obj)
+    if Enabled then enqueue(obj) end
+end)
+
+task.spawn(function()
+    while Alive do
+        local ping = "--"
+
+        pcall(function()
+            local item = Stats.Network.ServerStatsItem["Data Ping"]
+            local value = item:GetValueString()
+            local number = tonumber(value:match("[%d%.]+"))
+
+            if number then
+                ping = tostring(math.floor(number + 0.5))
+            end
+        end)
+
+        if PingLabel then
+            PingLabel.Text = "PING : " .. ping .. " ms"
+        end
+
+        task.wait(0.1)
     end
 end)
 
@@ -526,4 +565,4 @@ ENV.FarhanFPSOnlyCleanup = cleanup
 
 refresh()
 
-print("FARHAN STORE | FPS BOOST ONLY V1.0 AGGRESSIVE")
+print("FARHAN STORE ")
