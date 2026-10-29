@@ -6,12 +6,13 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = {
-    AutoFireDelay = 0.08,
+    AutoFireDelay = 0.12,
+    KillCreditWindow = 1.5,
     TargetDistance = 1000,
     KillEffectDuration = 0.55,
-    InteractDelay = 0.01,
+    InteractDelay = 0.1,
     GunValue = 0.1,
-    RecoilRefresh = 0.15
+    RecoilRefresh = 0.75
 }
 
 local Player = Players.LocalPlayer
@@ -59,6 +60,9 @@ local ActiveTool
 local LastFire = 0
 local RecoilClock = 0
 local DropdownOpen = false
+local RecentTargets = {}
+local GunModules = {}
+local GunStats = {Changed = 0, Checked = 0}
 
 local function bind(signal, callback)
     local connection = signal:Connect(callback)
@@ -84,7 +88,7 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_BlueBlack_V3"
+Gui.Name = "FarhanStore_BlueBlack_V4"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -322,37 +326,30 @@ local function playKillEffect()
 end
 
 local GunKeys = {
-    "Recoil", "RecoilAmount", "CameraRecoil",
-    "CameraShake", "Kick", "Kickback",
-    "VerticalRecoil", "HorizontalRecoil",
-    "RecoilX", "RecoilY", "GunRecoil",
-    "WeaponRecoil", "AimRecoil",
-    "ShakeAmount", "ShakeIntensity",
-    "Spread", "SpreadX", "SpreadY",
-    "MinSpread", "MaxSpread", "HipSpread",
-    "AimSpread", "SpreadAmount", "Bloom"
+    "Recoil", "RecoilAmount", "CameraRecoil", "CameraShake", "Kick", "Kickback",
+    "VerticalRecoil", "HorizontalRecoil", "RecoilX", "RecoilY", "GunRecoil",
+    "WeaponRecoil", "AimRecoil", "ShakeAmount", "ShakeIntensity", "Spread",
+    "SpreadX", "SpreadY", "MinSpread", "MaxSpread", "HipSpread", "AimSpread",
+    "SpreadAmount", "Bloom"
 }
 
 local function applyGun(tool)
-    if not Alive or not State.Recoil then return end
-    if not tool or not tool:IsA("Tool") then return end
-
+    if not Alive or not State.Recoil or not tool or not tool:IsA("Tool") then return end
     for _, setting in ipairs(tool:GetDescendants()) do
-        if setting:IsA("ModuleScript") and setting.Name == "Setting" then
+        if setting:IsA("ModuleScript") and setting.Name == "Setting" and not GunModules[setting] then
+            GunModules[setting] = true
+            -- require can initialize the module; never assume its returned keys are universal.
             local ok, module = pcall(require, setting)
-
             if ok and type(module) == "table" then
-                GunSaved[module] = GunSaved[module] or {}
-
+                GunStats.Checked += 1
+                local saved = GunSaved[module] or {}
+                GunSaved[module] = saved
                 for _, key in ipairs(GunKeys) do
-                    local value = module[key]
-
-                    if type(value) == "number" then
-                        if GunSaved[module][key] == nil then
-                            GunSaved[module][key] = value
-                        end
-
-                        module[key] = Config.GunValue
+                    local good, value = pcall(function() return rawget(module, key) end)
+                    if good and type(value) == "number" then
+                        if saved[key] == nil then saved[key] = value end
+                        local changed = pcall(function() rawset(module, key, Config.GunValue) end)
+                        if changed then GunStats.Changed += 1 end
                     end
                 end
             end
@@ -362,22 +359,10 @@ end
 
 local function applyAllGuns()
     if not State.Recoil then return end
-
-    local character = Player.Character
-    local backpack = Player:FindFirstChild("Backpack")
-
-    if character then
-        for _, obj in ipairs(character:GetChildren()) do
-            if obj:IsA("Tool") then
-                pcall(applyGun, obj)
-            end
-        end
-    end
-
-    if backpack then
-        for _, obj in ipairs(backpack:GetChildren()) do
-            if obj:IsA("Tool") then
-                pcall(applyGun, obj)
+    for _, root in ipairs({Player.Character, Player:FindFirstChild("Backpack")}) do
+        if root then
+            for _, obj in ipairs(root:GetChildren()) do
+                if obj:IsA("Tool") then pcall(applyGun, obj) end
             end
         end
     end
@@ -386,13 +371,13 @@ end
 local function restoreGuns()
     for module, properties in pairs(GunSaved) do
         for key, original in pairs(properties) do
-            pcall(function()
-                module[key] = original
-            end)
+            pcall(function() rawset(module, key, original) end)
         end
-
         GunSaved[module] = nil
     end
+    table.clear(GunModules)
+    GunStats.Changed = 0
+    GunStats.Checked = 0
 end
 
 local function fastPrompt(prompt)
@@ -474,88 +459,58 @@ end
 
 local function stopFire()
     if ActiveTool then
-        pcall(function()
-            ActiveTool:Deactivate()
-        end)
-
+        pcall(function() ActiveTool:Deactivate() end)
         ActiveTool = nil
     end
 end
 
 local function tryAutoFire()
-    if not State.AutoFire then
+    if not State.AutoFire or UIS:GetFocusedTextBox() then
         stopFire()
         return
     end
-
-    if UIS:GetFocusedTextBox() then
-        stopFire()
-        return
-    end
-
-    if UIS.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
-        stopFire()
-        return
-    end
-
     local tool = getEquippedTool()
-
     if not tool or not tool.Enabled then
         stopFire()
         return
     end
-
-    local target = getCrosshairTarget()
-
-    if not target then
+    local target, humanoid = getCrosshairTarget()
+    if not target or not humanoid then
         stopFire()
         return
     end
-
-    if ActiveTool and ActiveTool ~= tool then
-        stopFire()
-    end
-
+    if ActiveTool and ActiveTool ~= tool then stopFire() end
     local now = os.clock()
-
-    if now - LastFire < Config.AutoFireDelay then
-        return
-    end
-
+    if now - LastFire < Config.AutoFireDelay then return end
     LastFire = now
-
-    pcall(function()
-        tool:Deactivate()
+    RecentTargets[humanoid] = now
+    -- Tool:Activate is a normal local Tool activation, not a guaranteed server shot.
+    local ok = pcall(function()
+        if ActiveTool == tool then tool:Deactivate() end
         tool:Activate()
     end)
-
-    ActiveTool = tool
+    if ok then ActiveTool = tool end
 end
 
 local function hasKillCredit(humanoid)
-    for _, name in ipairs({
-        "creator", "Creator", "killer", "Killer"
-    }) do
+    for _, name in ipairs({"creator", "Creator", "killer", "Killer"}) do
         local tag = humanoid:FindFirstChild(name)
-
-        if tag and tag:IsA("ObjectValue") and tag.Value == Player then
-            return true
-        end
+        if tag and tag:IsA("ObjectValue") and tag.Value == Player then return true end
     end
-
     return false
 end
 
 local function watchHumanoid(humanoid)
     if WatchedHumanoids[humanoid] then return end
     WatchedHumanoids[humanoid] = true
-
     bind(humanoid.Died, function()
         if not Alive or not State.KillEffect then return end
-
-        if hasKillCredit(humanoid) then
+        local last = RecentTargets[humanoid]
+        -- Fallback is visual-only: recently targeted death is not confirmed kill credit.
+        if hasKillCredit(humanoid) or (last and os.clock() - last <= Config.KillCreditWindow) then
             playKillEffect()
         end
+        RecentTargets[humanoid] = nil
     end)
 end
 
@@ -788,6 +743,7 @@ local function cleanup()
     State.Recoil = false
     State.Interact = false
     State.KillEffect = false
+    table.clear(RecentTargets)
 
     stopFire()
     restoreGuns()
@@ -816,4 +772,4 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | BLUE BLACK V3")
+print("FARHAN STORE | BLUE BLACK V4 | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
