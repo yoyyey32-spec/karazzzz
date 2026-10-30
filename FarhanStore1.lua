@@ -1,4 +1,4 @@
-print('[Farhan FPS] V3.2: script started')
+print('[Farhan FPS] V3.3 Midnight Blue: script started')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -6,9 +6,17 @@ local Lighting = game:GetService('Lighting')
 local UIS = game:GetService('UserInputService')
 local RunService = game:GetService('RunService')
 local Stats = game:GetService('Stats')
+local TweenService = game:GetService('TweenService')
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild('PlayerGui')
 local ENV = getgenv and getgenv() or _G
+
+-- Remove stale GUI panels left by older FPS versions.
+for _, child in ipairs(PlayerGui:GetChildren()) do
+    if child:IsA('ScreenGui') and (child.Name:match('^FarhanStore_FPS') or child.Name:match('^FarhanFPS_')) then
+        pcall(function() child:Destroy() end)
+    end
+end
 
 if type(ENV.FarhanFPSOnlyCleanup) == 'function' then
     pcall(ENV.FarhanFPSOnlyCleanup)
@@ -29,12 +37,12 @@ local OriginalLighting = {}
 local GUI, Main, EnableButton, LightButton, Status, PingLabel, FPSLabel
 local FPS, Ping = 0, nil
 local Theme = {
-    Back = Color3.fromRGB(7, 12, 23),
-    Panel = Color3.fromRGB(12, 25, 47),
-    Off = Color3.fromRGB(22, 37, 60),
-    On = Color3.fromRGB(0, 110, 245),
+    Back = Color3.fromRGB(6, 13, 23),
+    Panel = Color3.fromRGB(10, 28, 48),
+    Off = Color3.fromRGB(16, 34, 57),
+    On = Color3.fromRGB(48, 135, 245),
     Text = Color3.fromRGB(235, 245, 255),
-    Muted = Color3.fromRGB(112, 193, 255)
+    Muted = Color3.fromRGB(108, 190, 255)
 }
 
 local function bind(signal, callback)
@@ -448,7 +456,7 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V32'
+GUI.Name = 'FarhanStore_FPS_MIDNIGHT_BLUE_V34'
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -465,7 +473,7 @@ Main.Parent = GUI
 corner(Main, 12)
 
 local outline = Instance.new('UIStroke')
-outline.Color = Color3.fromRGB(75, 159, 255)
+outline.Color = Color3.fromRGB(78, 168, 255)
 outline.Thickness = 1.3
 outline.Parent = Main
 
@@ -530,7 +538,7 @@ local function makeButton(y)
     b.Parent = Main
     corner(b, 8)
     local s = Instance.new('UIStroke')
-    s.Color = Color3.fromRGB(48, 89, 145)
+    s.Color = Color3.fromRGB(46, 102, 166)
     s.Parent = b
     return b
 end
@@ -569,6 +577,56 @@ Status.BackgroundTransparency = 1
 Status.TextSize = 11
 Status.Font = Enum.Font.GothamMedium
 Status.Parent = Main
+
+-- Lightweight animated 2D stars across the entire panel, including both buttons.
+-- TextLabels/overlay are non-interactive; the actual buttons remain clickable.
+local StarLayer = Instance.new('Frame')
+StarLayer.Name = 'AnimatedFallingStars'
+StarLayer.Size = UDim2.fromScale(1, 1)
+StarLayer.BackgroundTransparency = 1
+StarLayer.BorderSizePixel = 0
+StarLayer.ClipsDescendants = true
+StarLayer.Active = false
+StarLayer.ZIndex = 20
+StarLayer.Parent = Main
+
+local rng = Random.new()
+local starPalette = {
+    Color3.fromRGB(238, 249, 255),
+    Color3.fromRGB(100, 188, 255),
+    Color3.fromRGB(155, 213, 255)
+}
+for i = 1, 12 do
+    local star = Instance.new('TextLabel')
+    star.Name = 'FallingStar' .. i
+    star.Size = UDim2.fromOffset(13, 15)
+    star.BackgroundTransparency = 1
+    star.BorderSizePixel = 0
+    star.Active = false
+    star.Selectable = false
+    star.Text = i % 3 == 0 and '✦' or '✧'
+    star.Font = Enum.Font.GothamBold
+    star.TextSize = rng:NextInteger(9, 14)
+    star.TextColor3 = starPalette[(i % #starPalette) + 1]
+    star.TextTransparency = rng:NextNumber(0.05, 0.25)
+    star.ZIndex = 21
+    star.Parent = StarLayer
+    task.spawn(function()
+        task.wait(rng:NextNumber(0, 3))
+        while Alive and star.Parent do
+            local x = rng:NextNumber(0.12, 0.94)
+            star.Position = UDim2.new(x, 0, 0, -18)
+            local drift = rng:NextNumber(0.08, 0.22)
+            local fall = TweenService:Create(star,
+                TweenInfo.new(rng:NextNumber(2.8, 4.6), Enum.EasingStyle.Linear),
+                {Position = UDim2.new(math.max(0, x - drift), 0, 1, 16)})
+            fall:Play()
+            fall.Completed:Wait()
+            if not Alive then break end
+            task.wait(rng:NextNumber(0.05, 0.5))
+        end
+    end)
+end
 
 bind(EnableButton.MouseButton1Click, function()
     if Busy then return end
@@ -706,7 +764,7 @@ ENV.FarhanFPSOnlyCleanup = cleanup
 scanFonts(PlayerGui)
 scanFonts(GUI)
 refresh()
-print('FARHAN STORE | FPS ONLY EXTREME V2.9')
+print('FARHAN STORE | FPS MIDNIGHT BLUE V3.3')
 
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __ok then
