@@ -1,4 +1,4 @@
-print('[Farhan FPS] V3.0: script started')
+print('[Farhan FPS] V3.2: script started')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -189,6 +189,24 @@ local function isSafeDecoration(obj)
     })
 end
 
+-- Local-only optimization for non-interactive static gun-store display props.
+local function isGunStoreDisplay(obj)
+    if not obj:IsA('BasePart') or isProtected(obj) then return false end
+    if not obj.Anchored or obj.CanCollide or obj.CanTouch or obj.CanQuery then return false end
+    local current, store, display = obj, false, false
+    while current and current ~= Workspace do
+        local n = current.Name:lower()
+        if nameContains(n, {'gunstore', 'gun store', 'gunshop', 'gun shop', 'weaponstore', 'weapon shop'}) then store = true end
+        if nameContains(n, {'display', 'showcase', 'decoration', 'decorative', 'prop', 'dummy', 'rack'}) then display = true end
+        if current:IsA('Tool') or current:IsA('Model') and current:FindFirstChildWhichIsA('Humanoid') then return false end
+        if current:FindFirstChildWhichIsA('ProximityPrompt') or current:FindFirstChildWhichIsA('ClickDetector') then return false end
+        current = current.Parent
+    end
+    if not store or not display then return false end
+    if obj:FindFirstChildWhichIsA('ProximityPrompt', true) or obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
+    return true
+end
+
 local function optimize(obj)
     if not Alive or not Enabled or not obj or not obj.Parent then return end
     if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
@@ -244,6 +262,11 @@ local function optimize(obj)
 
     if obj:IsA('BasePart') then
         if isProtected(obj) then return end
+        if isGunStoreDisplay(obj) then
+            setSaved(obj, 'LocalTransparencyModifier', 1)
+            setSaved(obj, 'CastShadow', false)
+            return
+        end
         if isFoliage(obj) or isSafeDecoration(obj) then
             -- Local visual hiding only; do not destroy or reparent gameplay geometry.
             setSaved(obj, 'LocalTransparencyModifier', 1)
@@ -425,7 +448,7 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V31'
+GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V32'
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -467,12 +490,12 @@ Title.Parent = Header
 
 local Subtitle = Instance.new('TextLabel')
 Subtitle.Name = 'FPSSubtitle'
-Subtitle.Size = UDim2.new(1, -24, 0, 16)
-Subtitle.Position = UDim2.fromOffset(12, 29)
+Subtitle.Size = UDim2.new(1, -24, 0, 23)
+Subtitle.Position = UDim2.fromOffset(12, 27)
 Subtitle.BackgroundTransparency = 1
 Subtitle.Text = 'FPS'
-Subtitle.TextColor3 = Theme.On
-Subtitle.TextSize = 12
+Subtitle.TextColor3 = Theme.Muted
+Subtitle.TextSize = 19
 Subtitle.Font = Enum.Font.GothamBold
 Subtitle.TextXAlignment = Enum.TextXAlignment.Center
 Subtitle.Parent = Header
