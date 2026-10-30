@@ -1,4 +1,4 @@
-print('[Farhan FPS] V3.5 MIDNIGHT BLUE CLEAN START')
+print('[Farhan FPS] V3.6 MIDNIGHT BLUE ISOLATED START')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -11,17 +11,20 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild('PlayerGui')
 local ENV = getgenv and getgenv() or _G
 
--- Remove stale GUI panels left by older FPS versions.
-for _, child in ipairs(PlayerGui:GetChildren()) do
-    if child:IsA('ScreenGui') and (child.Name:match('^FarhanStore_FPS') or child.Name:match('^FarhanFPS_')) then
-        pcall(function() child:Destroy() end)
-    end
-end
-
 if type(ENV.FarhanFPSOnlyCleanup) == 'function' then
     pcall(ENV.FarhanFPSOnlyCleanup)
 end
 ENV.FarhanFPSOnlyCleanup = nil
+local FPS_GUI_NAME = 'FarhanStore_FPS_MIDNIGHT_BLUE_V36'
+local function removeOldFPSPanels()
+    for _, child in ipairs(PlayerGui:GetChildren()) do
+        if child:IsA('ScreenGui') and child.Name ~= FPS_GUI_NAME and
+            (child.Name:match('^FarhanStore_FPS') or child.Name:match('^FarhanFPS_')) then
+            pcall(function() child:Destroy() end)
+        end
+    end
+end
+removeOldFPSPanels()
 
 local Alive, Enabled, FullBright, Busy, Minimized = true, false, false, false, false
 local Saved = {}
@@ -65,6 +68,7 @@ end
 
 local function applyFont(obj)
     if not CustomFont then return end
+    if obj:FindFirstAncestorWhichIsA('ScreenGui') and obj:FindFirstAncestorWhichIsA('ScreenGui').Name:find('MACRO', 1, true) then return end
     if not (obj:IsA('TextLabel') or obj:IsA('TextButton') or obj:IsA('TextBox')) then return end
     if FontSaved[obj] == nil then
         local ok, old = pcall(function() return obj.FontFace end)
@@ -457,9 +461,9 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_MIDNIGHT_BLUE_V35'
+GUI.Name = 'FarhanStore_FPS_MIDNIGHT_BLUE_V36'
 GUI.ResetOnSpawn = false
-GUI.DisplayOrder = 150
+GUI.DisplayOrder = 350
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GUI.Parent = PlayerGui
@@ -763,10 +767,19 @@ local function cleanup()
     if GUI then GUI:Destroy() end
 end
 ENV.FarhanFPSOnlyCleanup = cleanup
+-- Keep older FPS panels from covering the new UI if a stale loader runs later.
+bind(PlayerGui.ChildAdded, function(child)
+    if child:IsA('ScreenGui') and child.Name ~= FPS_GUI_NAME and
+        (child.Name:match('^FarhanStore_FPS') or child.Name:match('^FarhanFPS_')) then
+        task.defer(function()
+            if Alive and child.Parent then child:Destroy() end
+        end)
+    end
+end)
 scanFonts(PlayerGui)
 scanFonts(GUI)
 refresh()
-print('FARHAN STORE | FPS MIDNIGHT BLUE V3.5 GUI READY')
+print('FARHAN STORE | FPS MIDNIGHT BLUE V3.6 GUI READY')
 
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __ok then
