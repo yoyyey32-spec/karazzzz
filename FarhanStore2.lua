@@ -1,4 +1,4 @@
-print('[Farhan Macro V5.7] GALAXY EDGE START')
+print('[Farhan Macro V5.8] GALAXY EDGE ISOLATED START')
 local __macroOK, __macroERR = xpcall(function()
 
 local Players = game:GetService("Players")
@@ -28,7 +28,7 @@ end
 ENV.FarhanLiteCleanup = nil
 -- Remove older GUI panels, including ones whose cleanup callback was lost.
 for _, child in ipairs(PlayerGui:GetChildren()) do
-    if child:IsA('ScreenGui') and (child.Name:match('^FarhanStore_.*MACRO') or child.Name == 'FarhanMacroStartupError') then
+    if child:IsA('ScreenGui') and (child.Name:match('^FarhanStore_.*MACRO') or child.Name:match('^FarhanStore_GalaxyEdge') or child.Name == 'FarhanMacroStartupError') then
         pcall(function() child:Destroy() end)
     end
 end
@@ -103,16 +103,16 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_GalaxyEdge_V57_MACRO"
+Gui.Name = "FarhanStore_GalaxyEdge_V58_MACRO"
 Gui.ResetOnSpawn = false
-Gui.DisplayOrder = 151
+Gui.DisplayOrder = 400
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
 Main.Size = UDim2.fromOffset(215, 240)
-Main.Position = UDim2.new(0, 35, 0.5, -120)
+Main.Position = UDim2.new(0, 275, 0.5, -120)
 Main.BackgroundColor3 = Theme.Background
 Main.BackgroundTransparency = 0.06
 Main.BorderSizePixel = 0
@@ -977,15 +977,21 @@ local function cleanup()
 end
 
 ENV.FarhanLiteCleanup = cleanup
+bind(PlayerGui.ChildAdded, function(child)
+    if child:IsA('ScreenGui') and child ~= Gui and
+        (child.Name:match('^FarhanStore_.*MACRO') or child.Name:match('^FarhanStore_GalaxyEdge')) then
+        task.defer(function() if Alive and child.Parent then child:Destroy() end end)
+    end
+end)
 ENV.FarhanLiteKillEffectPreview = playKillEffect
 
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | GALAXY EDGE V5.7 GUI READY | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __macroOK then
-    warn('[Farhan Macro V5.7] STARTUP ERROR: ' .. tostring(__macroERR))
+    warn('[Farhan Macro V5.8] STARTUP ERROR: ' .. tostring(__macroERR))
     pcall(function()
         local p = game:GetService('Players').LocalPlayer:WaitForChild('PlayerGui')
         local old = p:FindFirstChild('FarhanMacroStartupError')
