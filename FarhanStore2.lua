@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
@@ -7,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 
 local Config = {
     AutoFireDelay = 0.16,
+    AutoPulse = 0.055,
     KillCreditWindow = 1.5,
     TargetDistance = 1000,
     KillEffectDuration = 0.55,
@@ -66,6 +66,8 @@ local GunStats = {Changed = 0, Checked = 0}
 local ManualFireUntil = 0
 local ManualHeld = false
 local LastAutoTarget = nil
+local AutoPulseId = 0
+local TargetMarkClock = 0
 
 local function bind(signal, callback)
     local connection = signal:Connect(callback)
@@ -91,7 +93,7 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_BlueBlack_V41"
+Gui.Name = "FarhanStore_BlueBlack_V42"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -461,6 +463,7 @@ local function getCrosshairTarget()
 end
 
 local function stopFire()
+    AutoPulseId += 1
     if ActiveTool then
         pcall(function() ActiveTool:Deactivate() end)
         ActiveTool = nil
@@ -469,16 +472,17 @@ local function stopFire()
 end
 
 local function markShotTarget()
+    if not State.KillEffect then return end
     local _, humanoid = getCrosshairTarget()
     if humanoid then RecentTargets[humanoid] = os.clock() end
 end
 
 local function tryAutoFire()
-    if ManualHeld or os.clock() < ManualFireUntil then return end
     if not State.AutoFire or UIS:GetFocusedTextBox() then
         stopFire()
         return
     end
+    if ManualHeld or os.clock() < ManualFireUntil then return end
     local tool = getEquippedTool()
     if not tool or not tool.Enabled then
         stopFire()
@@ -489,18 +493,24 @@ local function tryAutoFire()
         stopFire()
         return
     end
-    if ActiveTool and ActiveTool ~= tool then stopFire() end
     local now = os.clock()
-    if ActiveTool == tool and LastAutoTarget == humanoid then
-        return
-    end
     if now - LastFire < Config.AutoFireDelay then return end
+    if ActiveTool then stopFire() end
     LastFire = now
     RecentTargets[humanoid] = now
+    AutoPulseId += 1
+    local pulse = AutoPulseId
     local ok = pcall(function() tool:Activate() end)
     if ok then
         ActiveTool = tool
         LastAutoTarget = humanoid
+        task.delay(Config.AutoPulse, function()
+            if not Alive or pulse ~= AutoPulseId then return end
+            if ActiveTool == tool and not ManualHeld then
+                pcall(function() tool:Deactivate() end)
+                ActiveTool = nil
+            end
+        end)
     end
 end
 
@@ -518,9 +528,17 @@ local function watchHumanoid(humanoid)
     bind(humanoid.Died, function()
         if not Alive or not State.KillEffect then return end
         local last = RecentTargets[humanoid]
-        -- Fallback is visual-only: recently targeted death is not confirmed kill credit.
-        if hasKillCredit(humanoid) or (last and os.clock() - last <= Config.KillCreditWindow) then
+        local recent = last and os.clock() - last <= Config.KillCreditWindow
+        local credited = hasKillCredit(humanoid)
+        if credited or recent then
             playKillEffect()
+        else
+            -- A replicated credit tag may arrive just after Died.
+            task.delay(0.12, function()
+                if Alive and State.KillEffect and hasKillCredit(humanoid) then
+                    playKillEffect()
+                end
+            end)
         end
         RecentTargets[humanoid] = nil
     end)
@@ -760,6 +778,15 @@ bind(RunService.Heartbeat, function(dt)
         end
     end
 
+    if ManualHeld and State.KillEffect then
+        TargetMarkClock += dt
+        if TargetMarkClock >= 0.06 then
+            TargetMarkClock = 0
+            markShotTarget()
+        end
+    else
+        TargetMarkClock = 0
+    end
     tryAutoFire()
 end)
 
@@ -800,4 +827,4 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+print("FARHAN STORE | BLUE BLACK V4.1 | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
