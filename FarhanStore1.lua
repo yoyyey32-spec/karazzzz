@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
@@ -94,15 +93,15 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_BlueBlack_V51"
+Gui.Name = "FarhanStore_BlueBlack_V52_MACRO"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(205, 211)
-Main.Position = UDim2.new(0, 35, 0.5, -105)
+Main.Size = UDim2.fromOffset(205, 235)
+Main.Position = UDim2.new(0, 35, 0.5, -117)
 Main.BackgroundColor3 = Theme.Background
 Main.BackgroundTransparency = 0.06
 Main.BorderSizePixel = 0
@@ -124,13 +123,13 @@ BackgroundGradient.Rotation = 90
 BackgroundGradient.Parent = Main
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 31)
+Header.Size = UDim2.new(1, 0, 0, 51)
 Header.BackgroundTransparency = 1
 Header.Active = true
 Header.Parent = Main
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -12, 1, 0)
+Title.Size = UDim2.new(1, -12, 0, 25)
 Title.Position = UDim2.fromOffset(6, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "Farhan Store"
@@ -139,6 +138,25 @@ Title.TextStrokeTransparency = 0.65
 Title.Parent = Header
 styleText(Title, 14)
 Title.TextColor3 = Color3.fromRGB(85, 180, 255)
+
+local Subtitle = Instance.new("TextLabel")
+Subtitle.Name = "MacroSubtitle"
+Subtitle.Size = UDim2.new(1, -12, 0, 15)
+Subtitle.Position = UDim2.fromOffset(6, 24)
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = "MACRO"
+Subtitle.TextXAlignment = Enum.TextXAlignment.Center
+Subtitle.Parent = Header
+styleText(Subtitle, 11)
+Subtitle.TextColor3 = Color3.fromRGB(85, 180, 255)
+
+local HeaderLine = Instance.new("Frame")
+HeaderLine.Size = UDim2.new(1, -26, 0, 1)
+HeaderLine.Position = UDim2.fromOffset(13, 45)
+HeaderLine.BackgroundColor3 = Color3.fromRGB(34, 82, 130)
+HeaderLine.BackgroundTransparency = 0.35
+HeaderLine.BorderSizePixel = 0
+HeaderLine.Parent = Main
 
 local function makeToggle(name, y, key)
     local Label = Instance.new("TextLabel")
@@ -185,14 +203,14 @@ local function makeToggle(name, y, key)
     return Toggle
 end
 
-local AutoButton = makeToggle("Auto Fire", 34, "AutoFire")
-local RecoilButton = makeToggle("No Recoil", 65, "Recoil")
-local InteractButton = makeToggle("Fast Interact", 96, "Interact")
-local KillButton = makeToggle("Kill Effect", 127, "KillEffect")
+local AutoButton = makeToggle("Auto Fire", 56, "AutoFire")
+local RecoilButton = makeToggle("No Recoil", 87, "Recoil")
+local InteractButton = makeToggle("Fast Interact", 118, "Interact")
+local KillButton = makeToggle("Kill Effect", 149, "KillEffect")
 
 local ColorLabel = Instance.new("TextLabel")
 ColorLabel.Size = UDim2.fromOffset(65, 25)
-ColorLabel.Position = UDim2.fromOffset(13, 163)
+ColorLabel.Position = UDim2.fromOffset(13, 185)
 ColorLabel.BackgroundTransparency = 1
 ColorLabel.Text = "Warna:"
 ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -201,7 +219,7 @@ styleText(ColorLabel, 12)
 
 local ColorButton = Instance.new("TextButton")
 ColorButton.Size = UDim2.fromOffset(109, 24)
-ColorButton.Position = UDim2.fromOffset(83, 163)
+ColorButton.Position = UDim2.fromOffset(83, 185)
 ColorButton.BackgroundColor3 = Theme.Secondary
 ColorButton.Text = ""
 ColorButton.BorderSizePixel = 0
@@ -238,7 +256,7 @@ styleText(Arrow, 10)
 
 local Dropdown = Instance.new("Frame")
 Dropdown.Size = UDim2.fromOffset(109, 81)
-Dropdown.Position = UDim2.fromOffset(83, 190)
+Dropdown.Position = UDim2.fromOffset(83, 212)
 Dropdown.BackgroundColor3 = Theme.Background
 Dropdown.BorderSizePixel = 0
 Dropdown.Visible = false
@@ -344,7 +362,6 @@ local function applyGun(tool)
     for _, setting in ipairs(tool:GetDescendants()) do
         if setting:IsA("ModuleScript") and setting.Name == "Setting" and not GunModules[setting] then
             GunModules[setting] = true
-            
             local ok, module = pcall(require, setting)
             if ok and type(module) == "table" then
                 GunStats.Checked += 1
@@ -603,7 +620,6 @@ local function watchHumanoid(humanoid)
             triggered = true
             playKillEffect()
         else
-            -- Give replicated creator tags a short opportunity to arrive.
             task.delay(0.18, function()
                 if Alive and State.KillEffect and not triggered and hasKillCredit(humanoid) then
                     triggered = true
