@@ -1,73 +1,41 @@
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-
-local Config = {
-    AutoFireDelay = 1 / 150,
-    AutoPulse = 1 / 300,
-    KillCreditWindow = 1.5,
-    TargetDistance = 1000,
-    KillEffectDuration = 0.55,
-    InteractDelay = 0.1,
-    GunValue = 0.1,
-    RecoilRefresh = 0.75
-}
-
+print('[Farhan FPS] V3.0: script started')
+local __ok, __err = xpcall(function()
+local Players = game:GetService('Players')
+local Workspace = game:GetService('Workspace')
+local Lighting = game:GetService('Lighting')
+local UIS = game:GetService('UserInputService')
+local RunService = game:GetService('RunService')
+local Stats = game:GetService('Stats')
 local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
+local PlayerGui = Player:WaitForChild('PlayerGui')
 local ENV = getgenv and getgenv() or _G
 
-if type(ENV.FarhanLiteCleanup) == "function" then
-    pcall(ENV.FarhanLiteCleanup)
+if type(ENV.FarhanFPSOnlyCleanup) == 'function' then
+    pcall(ENV.FarhanFPSOnlyCleanup)
 end
 
-local Alive = true
-
-local State = {
-    AutoFire = false,
-    Recoil = false,
-    Interact = false,
-    KillEffect = false,
-    Color = "Kuning",
-    Visible = true
-}
-
-local Theme = {
-    Background = Color3.fromRGB(7, 15, 27),
-    Secondary = Color3.fromRGB(15, 35, 59),
-    Blue = Color3.fromRGB(25, 135, 255),
-    Text = Color3.fromRGB(235, 245, 255),
-    Off = Color3.fromRGB(52, 72, 94)
-}
-
-local Colors = {
-    Kuning = Color3.fromRGB(255, 215, 45),
-    Biru = Color3.fromRGB(35, 145, 255),
-    Merah = Color3.fromRGB(255, 55, 65)
-}
-
+local Alive, Enabled, FullBright, Busy, Minimized = true, false, false, false, false
+local Saved = {}
+local FontSaved = {}
+local FontGuards = {}
+local EffectGuards = {}
+local GraySky = Color3.fromRGB(105, 105, 105)
+local CustomFont
+pcall(function() CustomFont = Font.fromId(12187372382) end)
+local Detached = {}
 local Connections = {}
-local PromptSaved = {}
-local GunSaved = {}
-local WatchedTools = {}
-local WatchedHumanoids = {}
-local Buttons = {}
-
-local ActiveEffect
-local ActiveTool
-local LastFire = 0
-local RecoilClock = 0
-local DropdownOpen = false
-local RecentTargets = {}
-local GunModules = {}
-local GunStats = {Changed = 0, Checked = 0}
-local ManualFireUntil = 0
-local ManualHeld = false
-local LastAutoTarget = nil
-local AutoPulseId = 0
-local TargetMarkClock = 0
+local OriginalQuality
+local OriginalLighting = {}
+local GUI, Main, EnableButton, LightButton, Status, PingLabel, FPSLabel
+local FPS, Ping = 0, nil
+local Theme = {
+    Back = Color3.fromRGB(7, 12, 23),
+    Panel = Color3.fromRGB(12, 25, 47),
+    Off = Color3.fromRGB(22, 37, 60),
+    On = Color3.fromRGB(0, 110, 245),
+    Text = Color3.fromRGB(235, 245, 255),
+    Muted = Color3.fromRGB(112, 193, 255)
+}
 
 local function bind(signal, callback)
     local connection = signal:Connect(callback)
@@ -75,849 +43,656 @@ local function bind(signal, callback)
     return connection
 end
 
-local function round(object, radius)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, radius)
-    corner.Parent = object
-end
-
-local function styleText(object, size)
-    object.Font = Enum.Font.GothamMedium
-    object.TextSize = size
-    object.TextColor3 = Theme.Text
-    object.BorderSizePixel = 0
-
-    pcall(function()
-        object.FontFace = Font.fromId(12187372382)
-    end)
-end
-
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_BlueBlack_V52_MACRO"
-Gui.ResetOnSpawn = false
-Gui.IgnoreGuiInset = true
-Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Gui.Parent = PlayerGui
-
-local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(205, 235)
-Main.Position = UDim2.new(0, 35, 0.5, -117)
-Main.BackgroundColor3 = Theme.Background
-Main.BackgroundTransparency = 0.06
-Main.BorderSizePixel = 0
-Main.Active = true
-Main.Parent = Gui
-round(Main, 10)
-
-local Stroke = Instance.new("UIStroke")
-Stroke.Color = Theme.Blue
-Stroke.Thickness = 2
-Stroke.Parent = Main
-
-local BackgroundGradient = Instance.new("UIGradient")
-BackgroundGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Theme.Secondary),
-    ColorSequenceKeypoint.new(1, Theme.Background)
-})
-BackgroundGradient.Rotation = 90
-BackgroundGradient.Parent = Main
-
-local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 51)
-Header.BackgroundTransparency = 1
-Header.Active = true
-Header.Parent = Main
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -12, 0, 25)
-Title.Position = UDim2.fromOffset(6, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "Farhan Store"
-Title.TextColor3 = Color3.fromRGB(85, 180, 255)
-Title.TextStrokeTransparency = 0.65
-Title.Parent = Header
-styleText(Title, 14)
-Title.TextColor3 = Color3.fromRGB(85, 180, 255)
-
-local Subtitle = Instance.new("TextLabel")
-Subtitle.Name = "MacroSubtitle"
-Subtitle.Size = UDim2.new(1, -12, 0, 15)
-Subtitle.Position = UDim2.fromOffset(6, 24)
-Subtitle.BackgroundTransparency = 1
-Subtitle.Text = "MACRO"
-Subtitle.TextXAlignment = Enum.TextXAlignment.Center
-Subtitle.Parent = Header
-styleText(Subtitle, 11)
-Subtitle.TextColor3 = Color3.fromRGB(85, 180, 255)
-
-local HeaderLine = Instance.new("Frame")
-HeaderLine.Size = UDim2.new(1, -26, 0, 1)
-HeaderLine.Position = UDim2.fromOffset(13, 45)
-HeaderLine.BackgroundColor3 = Color3.fromRGB(34, 82, 130)
-HeaderLine.BackgroundTransparency = 0.35
-HeaderLine.BorderSizePixel = 0
-HeaderLine.Parent = Main
-
-local function makeToggle(name, y, key)
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.fromOffset(120, 26)
-    Label.Position = UDim2.fromOffset(13, y)
-    Label.BackgroundTransparency = 1
-    Label.Text = name
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Main
-    styleText(Label, 12)
-
-    local Toggle = Instance.new("TextButton")
-    Toggle.Size = UDim2.fromOffset(42, 21)
-    Toggle.Position = UDim2.fromOffset(150, y + 2)
-    Toggle.BackgroundColor3 = Theme.Off
-    Toggle.BorderSizePixel = 0
-    Toggle.Text = ""
-    Toggle.Parent = Main
-    round(Toggle, 12)
-
-    local Dot = Instance.new("Frame")
-    Dot.Size = UDim2.fromOffset(15, 15)
-    Dot.Position = UDim2.fromOffset(3, 3)
-    Dot.BackgroundColor3 = Color3.new(1, 1, 1)
-    Dot.BorderSizePixel = 0
-    Dot.Parent = Toggle
-    round(Dot, 9)
-
-    Buttons[key] = function()
-        local on = State[key]
-        Toggle.BackgroundColor3 = on and Theme.Blue or Theme.Off
-
-        TweenService:Create(
-            Dot,
-            TweenInfo.new(0.12),
-            {
-                Position = on
-                    and UDim2.fromOffset(24, 3)
-                    or UDim2.fromOffset(3, 3)
-            }
-        ):Play()
+local function setSaved(obj, property, value)
+    if not obj then return end
+    local ok, original = pcall(function() return obj[property] end)
+    if not ok then return end
+    if not Saved[obj] then Saved[obj] = {} end
+    if Saved[obj][property] == nil then
+        Saved[obj][property] = {original}
     end
-
-    return Toggle
+    pcall(function() obj[property] = value end)
 end
 
-local AutoButton = makeToggle("Auto Fire", 56, "AutoFire")
-local RecoilButton = makeToggle("No Recoil", 87, "Recoil")
-local InteractButton = makeToggle("Fast Interact", 118, "Interact")
-local KillButton = makeToggle("Kill Effect", 149, "KillEffect")
-
-local ColorLabel = Instance.new("TextLabel")
-ColorLabel.Size = UDim2.fromOffset(65, 25)
-ColorLabel.Position = UDim2.fromOffset(13, 185)
-ColorLabel.BackgroundTransparency = 1
-ColorLabel.Text = "Warna:"
-ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
-ColorLabel.Parent = Main
-styleText(ColorLabel, 12)
-
-local ColorButton = Instance.new("TextButton")
-ColorButton.Size = UDim2.fromOffset(109, 24)
-ColorButton.Position = UDim2.fromOffset(83, 185)
-ColorButton.BackgroundColor3 = Theme.Secondary
-ColorButton.Text = ""
-ColorButton.BorderSizePixel = 0
-ColorButton.Parent = Main
-round(ColorButton, 6)
-
-local ColorStroke = Instance.new("UIStroke")
-ColorStroke.Color = Color3.fromRGB(36, 104, 171)
-ColorStroke.Thickness = 1
-ColorStroke.Parent = ColorButton
-
-local ColorDot = Instance.new("Frame")
-ColorDot.Size = UDim2.fromOffset(10, 10)
-ColorDot.Position = UDim2.fromOffset(8, 7)
-ColorDot.BorderSizePixel = 0
-ColorDot.Parent = ColorButton
-round(ColorDot, 6)
-
-local SelectedLabel = Instance.new("TextLabel")
-SelectedLabel.Size = UDim2.fromOffset(64, 24)
-SelectedLabel.Position = UDim2.fromOffset(22, 0)
-SelectedLabel.BackgroundTransparency = 1
-SelectedLabel.TextXAlignment = Enum.TextXAlignment.Left
-SelectedLabel.Parent = ColorButton
-styleText(SelectedLabel, 11)
-
-local Arrow = Instance.new("TextLabel")
-Arrow.Size = UDim2.fromOffset(19, 24)
-Arrow.Position = UDim2.fromOffset(88, 0)
-Arrow.BackgroundTransparency = 1
-Arrow.Text = "▼"
-Arrow.Parent = ColorButton
-styleText(Arrow, 10)
-
-local Dropdown = Instance.new("Frame")
-Dropdown.Size = UDim2.fromOffset(109, 81)
-Dropdown.Position = UDim2.fromOffset(83, 212)
-Dropdown.BackgroundColor3 = Theme.Background
-Dropdown.BorderSizePixel = 0
-Dropdown.Visible = false
-Dropdown.ZIndex = 10
-Dropdown.Parent = Main
-round(Dropdown, 6)
-
-local DropdownStroke = Instance.new("UIStroke")
-DropdownStroke.Color = Theme.Blue
-DropdownStroke.Thickness = 1
-DropdownStroke.Parent = Dropdown
-
-local function refreshColor()
-    SelectedLabel.Text = State.Color
-    ColorDot.BackgroundColor3 = Colors[State.Color]
-end
-
-for index, name in ipairs({"Kuning", "Biru", "Merah"}) do
-    local Option = Instance.new("TextButton")
-    Option.Size = UDim2.new(1, -6, 0, 25)
-    Option.Position = UDim2.fromOffset(3, (index - 1) * 26 + 2)
-    Option.BackgroundColor3 = Theme.Secondary
-    Option.BackgroundTransparency = 0.25
-    Option.Text = "●  " .. name
-    Option.TextColor3 = Colors[name]
-    Option.ZIndex = 11
-    Option.Parent = Dropdown
-    styleText(Option, 11)
-    Option.TextColor3 = Colors[name]
-    round(Option, 4)
-
-    bind(Option.MouseButton1Click, function()
-        State.Color = name
-        DropdownOpen = false
-        Dropdown.Visible = false
-        Arrow.Text = "▼"
-        refreshColor()
-    end)
-end
-
-bind(ColorButton.MouseButton1Click, function()
-    DropdownOpen = not DropdownOpen
-    Dropdown.Visible = DropdownOpen
-    Arrow.Text = DropdownOpen and "▲" or "▼"
-end)
-
-local Effect = Instance.new("Frame")
-Effect.Name = "KillEffect"
-Effect.Size = UDim2.new(1, 0, 0.43, 0)
-Effect.Position = UDim2.new(0, 0, 1, 0)
-Effect.BackgroundColor3 = Colors.Kuning
-Effect.BackgroundTransparency = 1
-Effect.BorderSizePixel = 0
-Effect.ZIndex = 20
-Effect.Parent = Gui
-
-local EffectGradient = Instance.new("UIGradient")
-EffectGradient.Rotation = 90
-EffectGradient.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 1),
-    NumberSequenceKeypoint.new(0.45, 0.35),
-    NumberSequenceKeypoint.new(1, 0)
-})
-EffectGradient.Parent = Effect
-
-local function playKillEffect()
-    if not Alive or not State.KillEffect then return end
-
-    if ActiveEffect then
-        ActiveEffect:Cancel()
+local function applyFont(obj)
+    if not CustomFont then return end
+    if not (obj:IsA('TextLabel') or obj:IsA('TextButton') or obj:IsA('TextBox')) then return end
+    if FontSaved[obj] == nil then
+        local ok, old = pcall(function() return obj.FontFace end)
+        if ok then FontSaved[obj] = old end
     end
-
-    Effect.BackgroundColor3 = Colors[State.Color]
-    Effect.Position = UDim2.new(0, 0, 1, 0)
-    Effect.BackgroundTransparency = 0.2
-
-    ActiveEffect = TweenService:Create(
-        Effect,
-        TweenInfo.new(
-            Config.KillEffectDuration,
-            Enum.EasingStyle.Quad,
-            Enum.EasingDirection.Out
-        ),
-        {
-            Position = UDim2.new(0, 0, 0.57, 0),
-            BackgroundTransparency = 1
-        }
-    )
-
-    ActiveEffect:Play()
-end
-
-local GunKeys = {
-    "Recoil", "RecoilAmount", "CameraRecoil", "CameraShake", "Kick", "Kickback",
-    "VerticalRecoil", "HorizontalRecoil", "RecoilX", "RecoilY", "GunRecoil",
-    "WeaponRecoil", "AimRecoil", "ShakeAmount", "ShakeIntensity", "Spread",
-    "SpreadX", "SpreadY", "MinSpread", "MaxSpread", "HipSpread", "AimSpread",
-    "SpreadAmount", "Bloom"
-}
-
-local function applyGun(tool)
-    if not Alive or not State.Recoil or not tool or not tool:IsA("Tool") then return end
-    for _, setting in ipairs(tool:GetDescendants()) do
-        if setting:IsA("ModuleScript") and setting.Name == "Setting" and not GunModules[setting] then
-            GunModules[setting] = true
-            local ok, module = pcall(require, setting)
-            if ok and type(module) == "table" then
-                GunStats.Checked += 1
-                local saved = GunSaved[module] or {}
-                GunSaved[module] = saved
-                for _, key in ipairs(GunKeys) do
-                    local good, value = pcall(function() return rawget(module, key) end)
-                    if good and type(value) == "number" then
-                        if saved[key] == nil then saved[key] = value end
-                        local changed = pcall(function() rawset(module, key, Config.GunValue) end)
-                        if changed then GunStats.Changed += 1 end
-                    end
-                end
+    pcall(function() obj.FontFace = CustomFont end)
+    if not FontGuards[obj] then
+        FontGuards[obj] = bind(obj:GetPropertyChangedSignal('FontFace'), function()
+            if Alive and obj.Parent and CustomFont and obj.FontFace ~= CustomFont then
+                pcall(function() obj.FontFace = CustomFont end)
             end
-        end
-    end
-end
-
-local function applyAllGuns()
-    if not State.Recoil then return end
-    for _, root in ipairs({Player.Character, Player:FindFirstChild("Backpack")}) do
-        if root then
-            for _, obj in ipairs(root:GetChildren()) do
-                if obj:IsA("Tool") then pcall(applyGun, obj) end
-            end
-        end
-    end
-end
-
-local function restoreGuns()
-    for module, properties in pairs(GunSaved) do
-        for key, original in pairs(properties) do
-            pcall(function() rawset(module, key, original) end)
-        end
-        GunSaved[module] = nil
-    end
-    table.clear(GunModules)
-    GunStats.Changed = 0
-    GunStats.Checked = 0
-end
-
-local function fastPrompt(prompt)
-    if not State.Interact then return end
-    if not prompt:IsA("ProximityPrompt") then return end
-
-    if PromptSaved[prompt] == nil then
-        PromptSaved[prompt] = prompt.HoldDuration
-    end
-
-    pcall(function()
-        prompt.HoldDuration = Config.InteractDelay
-    end)
-end
-
-local function restorePrompts()
-    for prompt, original in pairs(PromptSaved) do
-        pcall(function()
-            prompt.HoldDuration = original
-        end)
-
-        PromptSaved[prompt] = nil
-    end
-end
-
-local function getEquippedTool()
-    local character = Player.Character
-    if not character then return nil end
-
-    return character:FindFirstChildOfClass("Tool")
-end
-
-local ExcludedAutoFireItems = {
-    fist = true, fish = true, phone = true,
-    clipextended = true, extendedclip = true,
-    extendedmagazine = true, drummagazine = true,
-    heavymagazine = true, speedloader = true,
-    standartclip = true, standardclip = true,
-    standartmagazine = true, standardmagazine = true,
-    buffelbag = true, duffelbag = true, dufflebag = true,
-    crowbar = true, mask = true, knife = true,
-    macheteh = true, machete = true
-}
-
-local function isExcludedAutoFireTool(tool)
-    if not tool then return true end
-    local name = tool.Name:lower():gsub('[%s%p_]+', '')
-    return ExcludedAutoFireItems[name] == true
-end
-
-local Mouse = Player:GetMouse()
-
-local function targetFromPart(part)
-    local current = part
-    while current and current ~= Workspace do
-        if current:IsA("Model") then
-            local humanoid = current:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                local target = Players:GetPlayerFromCharacter(current)
-                if target and target ~= Player and humanoid.Health > 0 then
-                    return target, humanoid
-                end
-                return nil
-            end
-        end
-        current = current.Parent
-    end
-    return nil
-end
-
-local function getCrosshairTarget()
-    local camera = Workspace.CurrentCamera
-    if not camera then return nil end
-    local character = Player.Character
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = character and {character} or {}
-    params.IgnoreWater = true
-
-    local function cast(ray)
-        local hit = Workspace:Raycast(ray.Origin, ray.Direction * Config.TargetDistance, params)
-        if hit then return targetFromPart(hit.Instance) end
-        return nil
-    end
-
-    local mouseRay = Mouse.UnitRay
-    local target, humanoid = cast(mouseRay)
-    if target then return target, humanoid end
-    if UIS.MouseBehavior == Enum.MouseBehavior.LockCenter then
-        local center = camera.ViewportSize / 2
-        return cast(camera:ViewportPointToRay(center.X, center.Y))
-    end
-    return nil
-end
-
-local ClickOnce = type(mouse1click) == "function" and mouse1click
-    or (type(ENV.mouse1click) == "function" and ENV.mouse1click or nil)
-local PressMouse = type(mouse1press) == "function" and mouse1press
-    or (type(ENV.mouse1press) == "function" and ENV.mouse1press or nil)
-local ReleaseMouse = type(mouse1release) == "function" and mouse1release
-    or (type(ENV.mouse1release) == "function" and ENV.mouse1release or nil)
-local VIM
-pcall(function() VIM = game:GetService("VirtualInputManager") end)
-local SyntheticDown = false
-local SyntheticUntil = 0
-local ClickBusy = false
-
-local function releaseSynthetic()
-    if not SyntheticDown then return end
-    SyntheticDown = false
-    if ReleaseMouse then
-        pcall(ReleaseMouse)
-    elseif VIM then
-        local pos = UIS:GetMouseLocation()
-        pcall(function()
-            VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
         end)
     end
 end
 
-local function sendRealClick()
-    if ClickBusy then return false, "BUSY" end
-    ClickBusy = true
-    SyntheticUntil = os.clock() + 0.10
-    if ClickOnce then
-        local ok = pcall(ClickOnce)
-        ClickBusy = false
-        return ok, ok and "CLICK SENT" or "CLICK ERROR"
-    end
-    if not ((PressMouse and ReleaseMouse) or VIM) then
-        ClickBusy = false
-        return false, "NO CLICK API"
-    end
-    local ok
-    if PressMouse and ReleaseMouse then
-        ok = pcall(PressMouse)
-    else
-        local pos = UIS:GetMouseLocation()
-        ok = pcall(function()
-            VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-        end)
-    end
-    if not ok then
-        ClickBusy = false
-        return false, "CLICK BLOCKED"
-    end
-    SyntheticDown = true
-    task.delay(Config.AutoPulse, function()
-        releaseSynthetic()
-        ClickBusy = false
-    end)
-    return true, "CLICK SENT"
+local function scanFonts(root)
+    applyFont(root)
+    for _, obj in ipairs(root:GetDescendants()) do applyFont(obj) end
 end
 
-local function stopFire()
-    AutoPulseId += 1
-    releaseSynthetic()
-    ClickBusy = false
-    if ActiveTool then
-        pcall(function() ActiveTool:Deactivate() end)
-        ActiveTool = nil
+local function isProtected(obj)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char and (obj == char or obj:IsDescendantOf(char)) then return true end
     end
-    LastAutoTarget = nil
+    if obj:FindFirstAncestorOfClass('Tool') then return true end
+    if obj:FindFirstAncestorOfClass('Accessory') then return true end
+    if obj:FindFirstAncestorOfClass('VehicleSeat') then return true end
+    return false
 end
 
-local function markShotTarget()
-    if not State.KillEffect then return end
-    local _, humanoid = getCrosshairTarget()
-    if humanoid then RecentTargets[humanoid] = os.clock() end
-end
-
-local function tryAutoFire()
-    if not State.AutoFire or UIS:GetFocusedTextBox() then
-        stopFire()
-        return
-    end
-    if ManualHeld or os.clock() < ManualFireUntil then return end
-    local tool = getEquippedTool()
-    if not tool or not tool.Enabled or isExcludedAutoFireTool(tool) then
-        stopFire()
-        return
-    end
-    local target, humanoid = getCrosshairTarget()
-    if not target or not humanoid then
-        stopFire()
-        return
-    end
-    local now = os.clock()
-    if now - LastFire < Config.AutoFireDelay then return end
-    if ActiveTool then stopFire() end
-    LastFire = now
-    RecentTargets[humanoid] = now
-    local ok = sendRealClick()
-    if ok then
-        ActiveTool = tool
-        LastAutoTarget = humanoid
-    end
-end
-
-local function hasKillCredit(humanoid)
-    for _, name in ipairs({"creator", "Creator", "killer", "Killer"}) do
-        local tag = humanoid:FindFirstChild(name)
-        if tag and tag:IsA("ObjectValue") and tag.Value == Player then return true end
+local function nameContains(name, words)
+    name = name:lower()
+    for _, word in ipairs(words) do
+        if name:find(word, 1, true) then return true end
     end
     return false
 end
 
-local function watchHumanoid(humanoid)
-    if WatchedHumanoids[humanoid] then return end
-    WatchedHumanoids[humanoid] = true
-    local triggered = false
-    local function checkDeath()
-        if triggered or not Alive or not State.KillEffect then return end
-        local last = RecentTargets[humanoid]
-        local recent = last and os.clock() - last <= Config.KillCreditWindow
-        if hasKillCredit(humanoid) or recent then
-            triggered = true
-            playKillEffect()
-        else
-            task.delay(0.18, function()
-                if Alive and State.KillEffect and not triggered and hasKillCredit(humanoid) then
-                    triggered = true
-                    playKillEffect()
-                end
-            end)
-        end
-        RecentTargets[humanoid] = nil
+local function hasImportantAncestor(obj)
+    local current = obj
+    while current and current ~= Workspace do
+        if nameContains(current.Name, {
+            'door', 'gate', 'handle', 'button', 'prompt', 'weapon', 'gunstore',
+            'gun store', 'register', 'counter', 'floor', 'road', 'street',
+            'sidewalk', 'stairs', 'ladder', 'bridge', 'vehicle', 'car', 'wheel',
+            'spawn', 'shop', 'apartment', 'loot', 'interact', 'seat'
+        }) then return true end
+        current = current.Parent
     end
-    bind(humanoid.Died, checkDeath)
-    bind(humanoid.HealthChanged, function(health)
-        if health <= 0 then checkDeath() end
-    end)
+    return false
 end
 
-local function watchPlayer(targetPlayer)
-    if targetPlayer == Player then return end
-
-    local function watchCharacter(character)
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-            or character:WaitForChild("Humanoid", 10)
-
-        if Alive and humanoid then
-            watchHumanoid(humanoid)
-        end
+local function shootEffect(obj)
+    local current = obj
+    while current and current ~= game do
+        if nameContains(current.Name, {
+            'muzzle', 'flash', 'gunfire', 'shoot', 'shotfx', 'gunsmoke',
+            'blood', 'bleed', 'splatter', 'hitfx', 'impactfx', 'bulletfx',
+            'blooddrop', 'bloodparticle', 'bloodsplatter', 'bloodstain',
+            'hitmarkerfx', 'wound', 'droplet', 'drip', 'hitparticle',
+            'recoilblur', 'gunfx', 'smoke', 'spark', 'shellfx'
+        }) then return true end
+        current = current.Parent
     end
-
-    bind(targetPlayer.CharacterAdded, watchCharacter)
-
-    if targetPlayer.Character then
-        task.defer(watchCharacter, targetPlayer.Character)
-    end
+    return false
 end
 
-for _, targetPlayer in ipairs(Players:GetPlayers()) do
-    watchPlayer(targetPlayer)
-end
-
-bind(Players.PlayerAdded, watchPlayer)
-
-local function refreshButtons()
-    for _, refresh in pairs(Buttons) do
-        refresh()
+local function suppressEffect(obj)
+    if obj:IsA('ParticleEmitter') then
+        setSaved(obj, 'Enabled', false)
+        setSaved(obj, 'Rate', 0)
+        pcall(function() obj:Clear() end)
+    elseif obj:IsA('Trail') or obj:IsA('Beam') or obj:IsA('Smoke')
+        or obj:IsA('Fire') or obj:IsA('Sparkles') or obj:IsA('Highlight')
+        or obj:IsA('PostEffect') or obj:IsA('Light') then
+        setSaved(obj, 'Enabled', false)
+    elseif obj:IsA('Decal') or obj:IsA('Texture') then
+        setSaved(obj, 'Transparency', 1)
+    elseif obj:IsA('BasePart') and shootEffect(obj) and not isProtected(obj) then
+        setSaved(obj, 'LocalTransparencyModifier', 1)
     end
-end
-
-bind(AutoButton.MouseButton1Click, function()
-    State.AutoFire = not State.AutoFire
-
-    if not State.AutoFire then
-        stopFire()
-    end
-
-    LastFire = 0
-    refreshButtons()
-end)
-
-bind(RecoilButton.MouseButton1Click, function()
-    State.Recoil = not State.Recoil
-
-    if State.Recoil then
-        applyAllGuns()
-    else
-        restoreGuns()
-    end
-
-    refreshButtons()
-end)
-
-bind(InteractButton.MouseButton1Click, function()
-    State.Interact = not State.Interact
-
-    if State.Interact then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                fastPrompt(obj)
+    if (obj:IsA('ParticleEmitter') or obj:IsA('Trail') or obj:IsA('Beam')
+        or obj:IsA('Smoke') or obj:IsA('Fire') or obj:IsA('Sparkles')) and not EffectGuards[obj] then
+        EffectGuards[obj] = bind(obj:GetPropertyChangedSignal('Enabled'), function()
+            if Alive and Enabled and obj.Parent and obj.Enabled then
+                pcall(function() obj.Enabled = false end)
+                if obj:IsA('ParticleEmitter') then pcall(function() obj:Clear() end) end
             end
-        end
-    else
-        restorePrompts()
+        end)
+    end
+end
+
+local function visualEffect(obj)
+    return obj:IsA('ParticleEmitter') or obj:IsA('Smoke')
+        or obj:IsA('Fire') or obj:IsA('Sparkles')
+        or obj:IsA('Trail') or obj:IsA('Beam')
+        or obj:IsA('PostEffect')
+end
+
+local function isFoliage(obj)
+    if not obj:IsA('BasePart') or isProtected(obj) then return false end
+    if not obj.Anchored or obj.CanCollide or obj.CanTouch then return false end
+    if hasImportantAncestor(obj) then return false end
+    if obj:FindFirstChildWhichIsA('ProximityPrompt', true)
+        or obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
+    local current = obj
+    while current and current ~= Workspace do
+        if nameContains(current.Name, {
+            'leaf', 'leaves', 'foliage', 'bush', 'shrub', 'semak',
+            'grass', 'rumput', 'weed', 'flower', 'fern', 'plant',
+            'vegetation', 'ranting', 'twig'
+        }) then return true end
+        current = current.Parent
+    end
+    return false
+end
+
+local function isSafeDecoration(obj)
+    if not obj:IsA('BasePart') or isProtected(obj) then return false end
+    if not obj.Anchored or obj.CanCollide or obj.CanTouch or obj.CanQuery then return false end
+    if hasImportantAncestor(obj) then return false end
+    if obj:FindFirstChildWhichIsA('ProximityPrompt', true) then return false end
+    if obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
+    if obj:FindFirstChildWhichIsA('TouchTransmitter', true) then return false end
+    return nameContains(obj.Name, {
+        'debris', 'trash', 'garbage', 'litter', 'rubbish', 'paper',
+        'leaf', 'leaves', 'grass', 'bush', 'weed', 'decor', 'decoration',
+        'poster', 'graffiti', 'rubble', 'pebble', 'smallrock',
+        'flower', 'twig', 'branch', 'can', 'bottle', 'scrap', 'clutter'
+    })
+end
+
+local function optimize(obj)
+    if not Alive or not Enabled or not obj or not obj.Parent then return end
+    if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
+
+    if visualEffect(obj) then
+        suppressEffect(obj)
+        return
+    end
+    if shootEffect(obj) and (obj:IsA('Light') or obj:IsA('Decal') or obj:IsA('Texture')
+        or (obj:IsA('BasePart') and not isProtected(obj))) then
+        suppressEffect(obj)
+        return
     end
 
-    refreshButtons()
+    if obj:IsA('BloomEffect') or obj:IsA('BlurEffect') or obj:IsA('SunRaysEffect')
+        or obj:IsA('DepthOfFieldEffect') or obj:IsA('ColorCorrectionEffect') then
+        setSaved(obj, 'Enabled', false)
+        return
+    end
+
+    if obj:IsA('Highlight') then
+        if not isProtected(obj) then setSaved(obj, 'Enabled', false) end
+        return
+    end
+
+    if obj:IsA('PointLight') or obj:IsA('SpotLight') or obj:IsA('SurfaceLight') then
+        setSaved(obj, 'Shadows', false)
+        if nameContains(obj.Name, {'muzzle', 'flash', 'gunfire', 'shot', 'gunfx'}) then
+            setSaved(obj, 'Enabled', false)
+        end
+        return
+    end
+
+    if obj:IsA('Decal') or obj:IsA('Texture') then
+        if not isProtected(obj) or shootEffect(obj) then setSaved(obj, 'Transparency', 1) end
+        return
+    end
+
+    if obj:IsA('SurfaceAppearance') then
+        if not isProtected(obj) then
+            setSaved(obj, 'ColorMap', '')
+            setSaved(obj, 'NormalMap', '')
+            setSaved(obj, 'MetalnessMap', '')
+            setSaved(obj, 'RoughnessMap', '')
+        end
+        return
+    end
+
+    if obj:IsA('SpecialMesh') then
+        if not isProtected(obj) then setSaved(obj, 'TextureId', '') end
+        return
+    end
+
+    if obj:IsA('BasePart') then
+        if isProtected(obj) then return end
+        if isFoliage(obj) or isSafeDecoration(obj) then
+            -- Local visual hiding only; do not destroy or reparent gameplay geometry.
+            setSaved(obj, 'LocalTransparencyModifier', 1)
+            return
+        end
+        local partName = obj.Name:lower()
+        local parentName = obj.Parent and obj.Parent.Name:lower() or ''
+        local doorPanel = nameContains(partName, {'door', 'glasspanel', 'glass pane'})
+            or (nameContains(parentName, {'door'}) and nameContains(partName, {'panel', 'glass', 'window'}))
+        if doorPanel and not nameContains(partName, {'handle', 'hinge', 'knob', 'frame', 'hitbox', 'collision'}) and obj.Transparency < 0.5 then
+            setSaved(obj, 'Material', Enum.Material.Glass)
+            setSaved(obj, 'Color', Color3.fromRGB(110, 110, 110))
+            setSaved(obj, 'Transparency', 0.48)
+            setSaved(obj, 'Reflectance', 0)
+            setSaved(obj, 'CastShadow', false)
+            return
+        end
+        setSaved(obj, 'Material', Enum.Material.Plastic)
+        setSaved(obj, 'MaterialVariant', '')
+        -- Flat, aggressively reduced palette for environmental geometry.
+        -- Do not recolor gameplay tools, character, or interactable parts.
+        local n = obj.Name:lower()
+        local surface = obj.Parent
+        while surface and surface ~= Workspace do
+            if nameContains(surface.Name, {'road', 'street', 'asphalt', 'pavement', 'sidewalk', 'curb'}) then
+                n = n .. ' ' .. surface.Name:lower()
+                break
+            end
+            surface = surface.Parent
+        end
+        local c = obj.Color
+        local gray = math.floor((c.R * 0.299 + c.G * 0.587 + c.B * 0.114) * 255 / 64 + .5) * 64
+        gray = math.clamp(math.floor(gray / 64 + 0.5) * 64, 48, 176)
+        if nameContains(n, {'road', 'street', 'asphalt', 'pavement'}) then
+            setSaved(obj, 'Color', Color3.fromRGB(72, 72, 72))
+        elseif nameContains(n, {'sidewalk', 'concrete', 'curb'}) then
+            setSaved(obj, 'Color', Color3.fromRGB(112, 112, 112))
+        elseif not hasImportantAncestor(obj) then
+            setSaved(obj, 'Color', Color3.fromRGB(gray, gray, gray))
+        end
+        setSaved(obj, 'Reflectance', 0)
+        -- Preserve original Transparency: invisible helper/hitbox parts must stay invisible.
+        setSaved(obj, 'CastShadow', false)
+        if obj:IsA('MeshPart') then
+            setSaved(obj, 'TextureID', '')
+            setSaved(obj, 'RenderFidelity', Enum.RenderFidelity.Performance)
+            pcall(function() setSaved(obj, 'DoubleSided', false) end)
+        end
+        return
+    end
+
+    if obj:IsA('Clouds') then
+        setSaved(obj, 'Enabled', false)
+    elseif obj:IsA('Atmosphere') then
+        setSaved(obj, 'Density', 0)
+        setSaved(obj, 'Haze', 0)
+        setSaved(obj, 'Glare', 0)
+    elseif obj:IsA('Sky') then
+        for _, property in ipairs({
+            'SkyboxBk', 'SkyboxDn', 'SkyboxFt',
+            'SkyboxLf', 'SkyboxRt', 'SkyboxUp'
+        }) do setSaved(obj, property, '') end
+        setSaved(obj, 'CelestialBodiesShown', false)
+        setSaved(obj, 'StarCount', 0)
+    end
+end
+
+for _, property in ipairs({
+    'Brightness', 'Ambient', 'OutdoorAmbient', 'ExposureCompensation',
+    'GlobalShadows', 'EnvironmentDiffuseScale', 'EnvironmentSpecularScale',
+    'ShadowSoftness', 'FogColor', 'FogStart', 'FogEnd', 'ClockTime', 'GeographicLatitude'
+}) do
+    pcall(function() OriginalLighting[property] = Lighting[property] end)
+end
+
+local function applyLighting()
+    for property, value in pairs(OriginalLighting) do
+        pcall(function() Lighting[property] = value end)
+    end
+    if Enabled then
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.EnvironmentDiffuseScale = 0
+            Lighting.EnvironmentSpecularScale = 0
+            Lighting.ShadowSoftness = 0
+            Lighting.FogColor = GraySky
+            Lighting.FogStart = 180
+            Lighting.FogEnd = 900
+            Lighting.ClockTime = 12
+            Lighting.GeographicLatitude = 0
+            Lighting.Ambient = Color3.fromRGB(90, 90, 90)
+            Lighting.OutdoorAmbient = GraySky
+            Lighting.Brightness = 1
+            Lighting.ExposureCompensation = 0
+        end)
+    end
+    if FullBright then
+        pcall(function()
+            Lighting.Brightness = 1.35
+            Lighting.Ambient = Color3.fromRGB(95, 95, 95)
+            Lighting.OutdoorAmbient = Color3.fromRGB(105, 105, 105)
+            Lighting.ExposureCompensation = 0
+        end)
+    end
+end
+
+local function refresh()
+    if not Alive or not EnableButton then return end
+    EnableButton.BackgroundColor3 = Enabled and Theme.On or Theme.Off
+    LightButton.BackgroundColor3 = FullBright and Theme.On or Theme.Off
+    EnableButton.Text = 'Enabled'
+    LightButton.Text = 'Light'
+    Status.Text = Busy and 'PROCESSING...' or (Enabled and 'EXTREME ACTIVE' or 'READY')
+    Status.TextColor3 = Enabled and Color3.fromRGB(89, 232, 161) or Theme.Muted
+end
+
+local function scan(root)
+    local objects = root:GetDescendants()
+    for index, obj in ipairs(objects) do
+        if not Alive or not Enabled then return end
+        pcall(optimize, obj)
+        if index % 180 == 0 then task.wait() end
+    end
+end
+
+local function enable()
+    if Busy or Enabled or not Alive then return end
+    Busy, Enabled = true, true
+    refresh()
+    local terrain = Workspace.Terrain
+    setSaved(terrain, 'Decoration', false)
+    setSaved(terrain, 'GrassLength', 0)
+    setSaved(terrain, 'WaterWaveSize', 0)
+    setSaved(terrain, 'WaterWaveSpeed', 0)
+    setSaved(terrain, 'WaterReflectance', 0)
+    setSaved(terrain, 'WaterTransparency', 1)
+    pcall(function()
+        local rendering = settings().Rendering
+        if OriginalQuality == nil then OriginalQuality = rendering.QualityLevel end
+        rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    applyLighting()
+    for _, root in ipairs({Lighting, Workspace, PlayerGui}) do
+        if not Enabled or not Alive then break end
+        local ok, err = pcall(scan, root)
+        if not ok then warn('[Farhan FPS] Scan error:', err) end
+        task.wait()
+    end
+    Busy = false
+    refresh()
+end
+
+local function disable()
+    if not Enabled and not Busy then return end
+    Enabled = false
+    Busy = true
+    refresh()
+    for obj, connection in pairs(EffectGuards) do pcall(function() connection:Disconnect() end); EffectGuards[obj] = nil end
+    for obj, properties in pairs(Saved) do
+        for property, original in pairs(properties) do
+            pcall(function() obj[property] = original[1] end)
+        end
+        Saved[obj] = nil
+    end
+    table.clear(Detached)
+    if OriginalQuality ~= nil then
+        pcall(function() settings().Rendering.QualityLevel = OriginalQuality end)
+        OriginalQuality = nil
+    end
+    applyLighting()
+    Busy = false
+    refresh()
+end
+
+local function corner(parent, radius)
+    local c = Instance.new('UICorner')
+    c.CornerRadius = UDim.new(0, radius)
+    c.Parent = parent
+end
+
+GUI = Instance.new('ScreenGui')
+GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V31'
+GUI.ResetOnSpawn = false
+GUI.IgnoreGuiInset = true
+GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+GUI.Parent = PlayerGui
+
+Main = Instance.new('Frame')
+Main.Size = UDim2.fromOffset(225, 207)
+Main.Position = UDim2.new(0, 24, 0.5, -103)
+Main.BackgroundColor3 = Theme.Back
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Active = true
+Main.Parent = GUI
+corner(Main, 12)
+
+local outline = Instance.new('UIStroke')
+outline.Color = Color3.fromRGB(75, 159, 255)
+outline.Thickness = 1.3
+outline.Parent = Main
+
+local Header = Instance.new('Frame')
+Header.Size = UDim2.new(1, 0, 0, 53)
+Header.BackgroundColor3 = Theme.Panel
+Header.BorderSizePixel = 0
+Header.Active = true
+Header.Parent = Main
+corner(Header, 12)
+
+local Title = Instance.new('TextLabel')
+Title.Size = UDim2.new(1, -50, 0, 29)
+Title.Position = UDim2.fromOffset(12, 0)
+Title.BackgroundTransparency = 1
+Title.RichText = true
+Title.Text = '<font color="#FFFFFF">Farhan</font><font color="#168BFF">Store</font>'
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextSize = 19
+Title.Font = Enum.Font.GothamBold
+Title.Parent = Header
+
+local Subtitle = Instance.new('TextLabel')
+Subtitle.Name = 'FPSSubtitle'
+Subtitle.Size = UDim2.new(1, -24, 0, 16)
+Subtitle.Position = UDim2.fromOffset(12, 29)
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = 'FPS'
+Subtitle.TextColor3 = Theme.On
+Subtitle.TextSize = 12
+Subtitle.Font = Enum.Font.GothamBold
+Subtitle.TextXAlignment = Enum.TextXAlignment.Center
+Subtitle.Parent = Header
+
+local Minimize = Instance.new('TextButton')
+Minimize.Size = UDim2.fromOffset(21, 21)
+Minimize.Position = UDim2.new(1, -31, 0, 9)
+Minimize.BackgroundColor3 = Theme.On
+Minimize.Text = '-'
+Minimize.TextSize = 16
+Minimize.TextColor3 = Theme.Text
+Minimize.BorderSizePixel = 0
+Minimize.Parent = Header
+corner(Minimize, 10)
+
+local Accent = Instance.new('Frame')
+Accent.Size = UDim2.new(1, -24, 0, 2)
+Accent.Position = UDim2.fromOffset(12, 53)
+Accent.BackgroundColor3 = Theme.On
+Accent.BorderSizePixel = 0
+Accent.Parent = Main
+
+local function makeButton(y)
+    local b = Instance.new('TextButton')
+    b.Size = UDim2.new(1, -28, 0, 33)
+    b.Position = UDim2.fromOffset(14, y)
+    b.BackgroundColor3 = Theme.Off
+    b.BorderSizePixel = 0
+    b.TextColor3 = Theme.Text
+    b.TextSize = 15
+    b.Font = Enum.Font.GothamMedium
+    b.Parent = Main
+    corner(b, 8)
+    local s = Instance.new('UIStroke')
+    s.Color = Color3.fromRGB(48, 89, 145)
+    s.Parent = b
+    return b
+end
+
+EnableButton = makeButton(65)
+LightButton = makeButton(106)
+
+local Info = Instance.new('Frame')
+Info.Size = UDim2.new(1, -28, 0, 27)
+Info.Position = UDim2.fromOffset(14, 149)
+Info.BackgroundColor3 = Color3.fromRGB(11, 22, 40)
+Info.BorderSizePixel = 0
+Info.Parent = Main
+corner(Info, 6)
+
+local function infoLabel(text, pos, size, alignment)
+    local label = Instance.new('TextLabel')
+    label.Size = size
+    label.Position = pos
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Theme.Muted
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamMedium
+    label.TextXAlignment = alignment
+    label.Parent = Info
+    return label
+end
+
+PingLabel = infoLabel('PING: -- ms', UDim2.fromOffset(7, 0), UDim2.new(.57, -7, 1, 0), Enum.TextXAlignment.Left)
+FPSLabel = infoLabel('FPS: --', UDim2.new(.57, 0, 0, 0), UDim2.new(.43, -7, 1, 0), Enum.TextXAlignment.Right)
+Status = Instance.new('TextLabel')
+Status.Size = UDim2.new(1, -20, 0, 19)
+Status.Position = UDim2.fromOffset(10, 181)
+Status.BackgroundTransparency = 1
+Status.TextSize = 11
+Status.Font = Enum.Font.GothamMedium
+Status.Parent = Main
+
+bind(EnableButton.MouseButton1Click, function()
+    if Busy then return end
+    if Enabled then disable() else task.spawn(function()
+        local ok, err = pcall(enable)
+        if not ok then Busy = false; Status.Text = 'ERROR - CHECK CONSOLE'; warn('[Farhan FPS] Enable error:', err) end
+    end) end
+end)
+bind(LightButton.MouseButton1Click, function()
+    if Busy then return end
+    FullBright = not FullBright
+    applyLighting()
+    refresh()
+end)
+bind(Minimize.MouseButton1Click, function()
+    Minimized = not Minimized
+    EnableButton.Visible = not Minimized
+    LightButton.Visible = not Minimized
+    Info.Visible = not Minimized
+    Status.Visible = not Minimized
+    Main.Size = Minimized and UDim2.fromOffset(225, 53) or UDim2.fromOffset(225, 207)
+    Minimize.Text = Minimized and '+' or '-'
+end)
+bind(UIS.InputBegan, function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.RightAlt then
+        GUI.Enabled = not GUI.Enabled
+    end
 end)
 
-bind(KillButton.MouseButton1Click, function()
-    State.KillEffect = not State.KillEffect
-    refreshButtons()
-end)
-
-local Dragging = false
-local DragStart
-local StartPosition
-
+local Dragging, DragStart, StartPosition = false, nil, nil
 bind(Header.InputBegan, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         Dragging = true
         DragStart = input.Position
         StartPosition = Main.Position
     end
 end)
-
 bind(UIS.InputChanged, function(input)
     if not Dragging then return end
-
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
-
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         local delta = input.Position - DragStart
-
-        Main.Position = UDim2.new(
-            StartPosition.X.Scale,
-            StartPosition.X.Offset + delta.X,
-            StartPosition.Y.Scale,
-            StartPosition.Y.Offset + delta.Y
-        )
+        Main.Position = UDim2.new(StartPosition.X.Scale, StartPosition.X.Offset + delta.X, StartPosition.Y.Scale, StartPosition.Y.Offset + delta.Y)
     end
 end)
-
 bind(UIS.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         Dragging = false
     end
 end)
 
-bind(UIS.InputBegan, function(input, processed)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed and os.clock() > SyntheticUntil then
-        stopFire()
-        ManualHeld = true
-        markShotTarget()
+bind(game.DescendantAdded, function(obj)
+    if not Alive then return end
+    if obj:IsDescendantOf(PlayerGui) or (GUI and obj:IsDescendantOf(GUI)) then
+        applyFont(obj)
     end
-    if processed then return end
-
-    if input.KeyCode == Enum.KeyCode.RightAlt then
-        State.Visible = not State.Visible
-        Main.Visible = State.Visible
-        Dropdown.Visible = false
-        DropdownOpen = false
-        Arrow.Text = "▼"
-    end
+    if not Enabled then return end
+    if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
+    local valid = false
+    pcall(function() valid = obj:IsDescendantOf(Workspace) or obj:IsDescendantOf(Lighting) or obj:IsDescendantOf(PlayerGui) end)
+    if valid then pcall(optimize, obj) end
 end)
 
-bind(UIS.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and os.clock() > SyntheticUntil then
-        ManualHeld = false
-        ManualFireUntil = os.clock() + 0.2
-    end
-end)
-
-bind(Workspace.DescendantAdded, function(obj)
-    if Alive and State.Interact and obj:IsA("ProximityPrompt") then
-        fastPrompt(obj)
-    end
-end)
-
-local function watchTool(tool)
-    if not tool:IsA("Tool") or WatchedTools[tool] then return end
-
-    WatchedTools[tool] = true
-
-    bind(tool.Activated, function()
-        if Alive then
-            markShotTarget()
-        end
-    end)
-
-    bind(tool.Equipped, function()
-        if Alive then
-            task.defer(function()
-                applyGun(tool)
-            end)
-        end
-    end)
-
-    bind(tool.Unequipped, function()
-        if ActiveTool == tool then
-            stopFire()
-        end
-    end)
-
-    bind(tool.DescendantAdded, function(obj)
-        if Alive
-            and obj:IsA("ModuleScript")
-            and obj.Name == "Setting" then
-
-            task.defer(function()
-                applyGun(tool)
-            end)
-        end
-    end)
-
-    task.defer(function()
-        if Alive then
-            applyGun(tool)
-        end
-    end)
-end
-
-local function watchCharacter(character)
-    stopFire()
-
-    bind(character.ChildAdded, function(child)
-        if child:IsA("Tool") then
-            watchTool(child)
-
-            if State.Recoil then
-                task.defer(function()
-                    applyGun(child)
-                end)
+task.spawn(function()
+    while Alive do
+        if Enabled and not Busy then
+            applyLighting()
+            -- Weather/time scripts may replace effects; only revisit the small effects set.
+            for _, root in ipairs({Lighting, Workspace.CurrentCamera}) do
+                if root then
+                    for _, obj in ipairs(root:GetDescendants()) do
+                        if not Alive or not Enabled then break end
+                        if visualEffect(obj) or obj:IsA('Sky') or obj:IsA('Atmosphere') or obj:IsA('Clouds') then
+                            pcall(optimize, obj)
+                        end
+                    end
+                end
             end
         end
-    end)
-
-    for _, child in ipairs(character:GetChildren()) do
-        watchTool(child)
+        task.wait(2)
     end
-end
-
-if Player.Character then
-    watchCharacter(Player.Character)
-end
-
-bind(Player.CharacterAdded, watchCharacter)
-
-local Backpack = Player:WaitForChild("Backpack")
-
-bind(Backpack.ChildAdded, function(child)
-    watchTool(child)
 end)
 
-for _, child in ipairs(Backpack:GetChildren()) do
-    watchTool(child)
-end
-
-bind(RunService.Heartbeat, function(dt)
-    if not Alive then return end
-
-    RecoilClock += dt
-
-    if RecoilClock >= Config.RecoilRefresh then
-        RecoilClock = 0
-
-        if State.Recoil then
-            applyAllGuns()
-        end
+local frames, lastFPS = 0, os.clock()
+bind(RunService.RenderStepped, function()
+    frames += 1
+    local now = os.clock()
+    local elapsed = now - lastFPS
+    if elapsed >= .5 then
+        FPS = math.floor(frames / elapsed + .5)
+        frames = 0
+        lastFPS = now
     end
+end)
 
-    if (ManualHeld or (State.AutoFire and ActiveTool)) and State.KillEffect then
-        TargetMarkClock += dt
-        if TargetMarkClock >= 0.06 then
-            TargetMarkClock = 0
-            markShotTarget()
-        end
-    else
-        TargetMarkClock = 0
+task.spawn(function()
+    while Alive do
+        local display = '--'
+        pcall(function()
+            local item = Stats.Network.ServerStatsItem['Data Ping']
+            local number = tonumber(item:GetValueString():match('[%d%.]+'))
+            if number then Ping = math.floor(number + .5); display = tostring(Ping) end
+        end)
+        if PingLabel then PingLabel.Text = 'PING: ' .. display .. ' ms' end
+        if FPSLabel then FPSLabel.Text = 'FPS: ' .. FPS end
+        task.wait(.2)
     end
-    tryAutoFire()
 end)
 
 local function cleanup()
     if not Alive then return end
     Alive = false
-
-    State.AutoFire = false
-    State.Recoil = false
-    State.Interact = false
-    State.KillEffect = false
-    table.clear(RecentTargets)
-
-    stopFire()
-    restoreGuns()
-    restorePrompts()
-
-    if ActiveEffect then
-        ActiveEffect:Cancel()
+    if Enabled or Busy then
+        Enabled = false
+        for obj, properties in pairs(Saved) do
+            for property, original in pairs(properties) do
+                pcall(function() obj[property] = original[1] end)
+            end
+        end
+        if OriginalQuality ~= nil then
+            pcall(function() settings().Rendering.QualityLevel = OriginalQuality end)
+        end
     end
-
-    for _, connection in ipairs(Connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
+    FullBright = false
+    for obj, connection in pairs(EffectGuards) do pcall(function() connection:Disconnect() end); EffectGuards[obj] = nil end
+    applyLighting()
+    for obj, connection in pairs(FontGuards) do pcall(function() connection:Disconnect() end); FontGuards[obj] = nil end
+    for obj, original in pairs(FontSaved) do
+        pcall(function() obj.FontFace = original end)
+        FontSaved[obj] = nil
     end
-
-    table.clear(Connections)
-
-    if Gui then
-        Gui:Destroy()
-    end
+    for _, connection in ipairs(Connections) do pcall(function() connection:Disconnect() end) end
+    if GUI then GUI:Destroy() end
 end
+ENV.FarhanFPSOnlyCleanup = cleanup
+scanFonts(PlayerGui)
+scanFonts(GUI)
+refresh()
+print('FARHAN STORE | FPS ONLY EXTREME V2.9')
 
-ENV.FarhanLiteCleanup = cleanup
-ENV.FarhanLiteKillEffectPreview = playKillEffect
-
-refreshButtons()
-refreshColor()
-
-print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
+if not __ok then
+    warn('[Farhan FPS] STARTUP ERROR: ' .. tostring(__err))
+    pcall(function()
+        local p = game:GetService('Players').LocalPlayer:WaitForChild('PlayerGui')
+        local g = Instance.new('ScreenGui'); g.Name = 'FarhanFPS_Error'; g.ResetOnSpawn = false; g.Parent = p
+        local t = Instance.new('TextLabel'); t.Size = UDim2.fromOffset(340, 90); t.Position = UDim2.fromOffset(20, 100)
+        t.BackgroundColor3 = Color3.fromRGB(40, 10, 15); t.TextColor3 = Color3.new(1,1,1)
+        t.TextWrapped = true; t.Text = 'FARHAN FPS STARTUP ERROR\n' .. tostring(__err):sub(1,180); t.Parent = g
+    end)
+end
