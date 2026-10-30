@@ -6,8 +6,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = {
-    AutoFireDelay = 0.12,
-    AutoPulse = 0.055,
+    AutoFireDelay = 1 / 150,
+    AutoPulse = 1 / 300,
     KillCreditWindow = 1.5,
     TargetDistance = 1000,
     KillEffectDuration = 0.55,
@@ -490,7 +490,7 @@ end
 local function sendRealClick()
     if ClickBusy then return false, "BUSY" end
     ClickBusy = true
-    SyntheticUntil = os.clock() + 0.20
+    SyntheticUntil = os.clock() + 0.10
     if ClickOnce then
         local ok = pcall(ClickOnce)
         ClickBusy = false
@@ -538,36 +538,6 @@ local function markShotTarget()
     if humanoid then RecentTargets[humanoid] = os.clock() end
 end
 
-local DebugStatus = Instance.new("TextLabel")
-DebugStatus.Name = "AutoFireDebug"
-DebugStatus.Size = UDim2.fromOffset(205, 58)
-DebugStatus.Position = UDim2.new(0, 0, 1, 5)
-DebugStatus.BackgroundColor3 = Theme.Background
-DebugStatus.BorderSizePixel = 0
-DebugStatus.TextWrapped = true
-DebugStatus.TextXAlignment = Enum.TextXAlignment.Left
-DebugStatus.TextYAlignment = Enum.TextYAlignment.Center
-DebugStatus.Text = "AUTO DEBUG: OFF"
-DebugStatus.Visible = false
-DebugStatus.Parent = Main
-styleText(DebugStatus, 10)
-round(DebugStatus, 6)
-local DebugClock = 0
-local FireAttempts = 0
-local ActivationEvents = 0
-local LastFireResult = "WAIT"
-local function refreshAutoDebug(dt)
-    DebugClock += dt
-    if DebugClock < 0.12 then return end
-    DebugClock = 0
-    DebugStatus.Visible = State.AutoFire and State.Visible
-    if not State.AutoFire then return end
-    local tool = getEquippedTool()
-    local target, humanoid = getCrosshairTarget()
-    local targetText = target and humanoid and ("FOUND (" .. math.floor(humanoid.Health) .. " HP)") or "NONE"
-    DebugStatus.Text = "TARGET: " .. targetText .. "\nTOOL: " .. (tool and tool.Name or "NONE") .. " | " .. LastFireResult .. "\nSENT: " .. FireAttempts .. " | ACTIVATED EVENT: " .. ActivationEvents
-end
-
 local function tryAutoFire()
     if not State.AutoFire or UIS:GetFocusedTextBox() then
         stopFire()
@@ -589,9 +559,7 @@ local function tryAutoFire()
     if ActiveTool then stopFire() end
     LastFire = now
     RecentTargets[humanoid] = now
-    FireAttempts += 1
-    local ok, status = sendRealClick()
-    LastFireResult = status
+    local ok = sendRealClick()
     if ok then
         ActiveTool = tool
         LastAutoTarget = humanoid
@@ -673,7 +641,6 @@ bind(AutoButton.MouseButton1Click, function()
     end
 
     LastFire = 0
-    DebugStatus.Visible = State.AutoFire and State.Visible
     refreshButtons()
 end)
 
@@ -760,7 +727,6 @@ bind(UIS.InputBegan, function(input, processed)
     if input.KeyCode == Enum.KeyCode.RightAlt then
         State.Visible = not State.Visible
         Main.Visible = State.Visible
-        DebugStatus.Visible = State.Visible and State.AutoFire
         Dropdown.Visible = false
         DropdownOpen = false
         Arrow.Text = "▼"
@@ -787,7 +753,6 @@ local function watchTool(tool)
 
     bind(tool.Activated, function()
         if Alive then
-            ActivationEvents += 1
             markShotTarget()
         end
     end)
@@ -883,7 +848,6 @@ bind(RunService.Heartbeat, function(dt)
         TargetMarkClock = 0
     end
     tryAutoFire()
-    refreshAutoDebug(dt)
 end)
 
 local function cleanup()
