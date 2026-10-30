@@ -1,4 +1,4 @@
-print('[Farhan FPS] : script started')
+print('[Farhan FPS] V2.8: script started')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -77,8 +77,10 @@ local function scanFonts(root)
 end
 
 local function isProtected(obj)
-    local char = Player.Character
-    if char and (obj == char or obj:IsDescendantOf(char)) then return true end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char and (obj == char or obj:IsDescendantOf(char)) then return true end
+    end
     if obj:FindFirstAncestorOfClass('Tool') then return true end
     if obj:FindFirstAncestorOfClass('Accessory') then return true end
     if obj:FindFirstAncestorOfClass('VehicleSeat') then return true end
@@ -150,6 +152,24 @@ local function visualEffect(obj)
         or obj:IsA('PostEffect')
 end
 
+local function isFoliage(obj)
+    if not obj:IsA('BasePart') or isProtected(obj) then return false end
+    if not obj.Anchored or obj.CanCollide or obj.CanTouch then return false end
+    if hasImportantAncestor(obj) then return false end
+    if obj:FindFirstChildWhichIsA('ProximityPrompt', true)
+        or obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
+    local current = obj
+    while current and current ~= Workspace do
+        if nameContains(current.Name, {
+            'leaf', 'leaves', 'foliage', 'bush', 'shrub', 'semak',
+            'grass', 'rumput', 'weed', 'flower', 'fern', 'plant',
+            'vegetation', 'ranting', 'twig'
+        }) then return true end
+        current = current.Parent
+    end
+    return false
+end
+
 local function isSafeDecoration(obj)
     if not obj:IsA('BasePart') or isProtected(obj) then return false end
     if not obj.Anchored or obj.CanCollide or obj.CanTouch or obj.CanQuery then return false end
@@ -219,19 +239,19 @@ local function optimize(obj)
 
     if obj:IsA('BasePart') then
         if isProtected(obj) then return end
-        if isSafeDecoration(obj) then
+        if isFoliage(obj) or isSafeDecoration(obj) then
             -- Local visual hiding only; do not destroy or reparent gameplay geometry.
             setSaved(obj, 'LocalTransparencyModifier', 1)
             return
         end
         setSaved(obj, 'Material', Enum.Material.Plastic)
-        if not hasImportantAncestor(obj) then setSaved(obj, 'MaterialVariant', '') end
+        setSaved(obj, 'MaterialVariant', '')
         -- Flat, aggressively reduced palette for environmental geometry.
         -- Do not recolor gameplay tools, character, or interactable parts.
         local n = obj.Name:lower()
         local c = obj.Color
         local gray = math.floor((c.R * 0.299 + c.G * 0.587 + c.B * 0.114) * 255 / 64 + .5) * 64
-        gray = math.clamp(gray, 32, 192)
+        gray = math.clamp(math.floor(gray / 64 + 0.5) * 64, 48, 176)
         if nameContains(n, {'road', 'street', 'asphalt', 'pavement'}) then
             setSaved(obj, 'Color', Color3.fromRGB(52, 52, 52))
         elseif nameContains(n, {'sidewalk', 'concrete', 'curb'}) then
@@ -245,6 +265,7 @@ local function optimize(obj)
         if obj:IsA('MeshPart') then
             setSaved(obj, 'TextureID', '')
             setSaved(obj, 'RenderFidelity', Enum.RenderFidelity.Performance)
+            pcall(function() setSaved(obj, 'DoubleSided', false) end)
         end
         return
     end
@@ -308,8 +329,8 @@ local function refresh()
     if not Alive or not EnableButton then return end
     EnableButton.BackgroundColor3 = Enabled and Theme.On or Theme.Off
     LightButton.BackgroundColor3 = FullBright and Theme.On or Theme.Off
-    EnableButton.Text = Enabled and 'Enabled : ON' or 'Enabled : OFF'
-    LightButton.Text = FullBright and 'Full Bright : ON' or 'Full Bright : OFF'
+    EnableButton.Text = 'Enabled'
+    LightButton.Text = 'Light'
     Status.Text = Busy and 'PROCESSING...' or (Enabled and 'EXTREME ACTIVE' or 'READY')
     Status.TextColor3 = Enabled and Color3.fromRGB(89, 232, 161) or Theme.Muted
 end
@@ -329,6 +350,7 @@ local function enable()
     refresh()
     local terrain = Workspace.Terrain
     setSaved(terrain, 'Decoration', false)
+    setSaved(terrain, 'GrassLength', 0)
     setSaved(terrain, 'WaterWaveSize', 0)
     setSaved(terrain, 'WaterWaveSpeed', 0)
     setSaved(terrain, 'WaterReflectance', 0)
@@ -378,7 +400,7 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V28'
+GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V29'
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
