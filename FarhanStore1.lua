@@ -1,4 +1,4 @@
-print('[Farhan FPS] V2.6 DEBUG: script started')
+print('[Farhan FPS] : script started')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -16,6 +16,12 @@ end
 
 local Alive, Enabled, FullBright, Busy, Minimized = true, false, false, false, false
 local Saved = {}
+local FontSaved = {}
+local FontGuards = {}
+local EffectGuards = {}
+local GraySky = Color3.fromRGB(105, 105, 105)
+local CustomFont
+pcall(function() CustomFont = Font.fromId(12187372382) end)
 local Detached = {}
 local Connections = {}
 local OriginalQuality
@@ -46,6 +52,28 @@ local function setSaved(obj, property, value)
         Saved[obj][property] = {original}
     end
     pcall(function() obj[property] = value end)
+end
+
+local function applyFont(obj)
+    if not CustomFont then return end
+    if not (obj:IsA('TextLabel') or obj:IsA('TextButton') or obj:IsA('TextBox')) then return end
+    if FontSaved[obj] == nil then
+        local ok, old = pcall(function() return obj.FontFace end)
+        if ok then FontSaved[obj] = old end
+    end
+    pcall(function() obj.FontFace = CustomFont end)
+    if not FontGuards[obj] then
+        FontGuards[obj] = bind(obj:GetPropertyChangedSignal('FontFace'), function()
+            if Alive and obj.Parent and CustomFont and obj.FontFace ~= CustomFont then
+                pcall(function() obj.FontFace = CustomFont end)
+            end
+        end)
+    end
+end
+
+local function scanFonts(root)
+    applyFont(root)
+    for _, obj in ipairs(root:GetDescendants()) do applyFont(obj) end
 end
 
 local function isProtected(obj)
@@ -79,6 +107,42 @@ local function hasImportantAncestor(obj)
     return false
 end
 
+local function shootEffect(obj)
+    local current = obj
+    while current and current ~= game do
+        if nameContains(current.Name, {
+            'muzzle', 'flash', 'gunfire', 'shoot', 'shotfx', 'gunsmoke',
+            'blood', 'bleed', 'splatter', 'hitfx', 'impactfx', 'bulletfx',
+            'recoilblur', 'gunfx', 'smoke', 'spark', 'shellfx'
+        }) then return true end
+        current = current.Parent
+    end
+    return false
+end
+
+local function suppressEffect(obj)
+    if obj:IsA('ParticleEmitter') then
+        setSaved(obj, 'Enabled', false)
+        setSaved(obj, 'Rate', 0)
+        pcall(function() obj:Clear() end)
+    elseif obj:IsA('Trail') or obj:IsA('Beam') or obj:IsA('Smoke')
+        or obj:IsA('Fire') or obj:IsA('Sparkles') or obj:IsA('Highlight')
+        or obj:IsA('PostEffect') or obj:IsA('Light') then
+        setSaved(obj, 'Enabled', false)
+    elseif obj:IsA('Decal') or obj:IsA('Texture') then
+        setSaved(obj, 'Transparency', 1)
+    end
+    if (obj:IsA('ParticleEmitter') or obj:IsA('Trail') or obj:IsA('Beam')
+        or obj:IsA('Smoke') or obj:IsA('Fire') or obj:IsA('Sparkles')) and not EffectGuards[obj] then
+        EffectGuards[obj] = bind(obj:GetPropertyChangedSignal('Enabled'), function()
+            if Alive and Enabled and obj.Parent and obj.Enabled then
+                pcall(function() obj.Enabled = false end)
+                if obj:IsA('ParticleEmitter') then pcall(function() obj:Clear() end) end
+            end
+        end)
+    end
+end
+
 local function visualEffect(obj)
     return obj:IsA('ParticleEmitter') or obj:IsA('Smoke')
         or obj:IsA('Fire') or obj:IsA('Sparkles')
@@ -96,7 +160,8 @@ local function isSafeDecoration(obj)
     return nameContains(obj.Name, {
         'debris', 'trash', 'garbage', 'litter', 'rubbish', 'paper',
         'leaf', 'leaves', 'grass', 'bush', 'weed', 'decor', 'decoration',
-        'poster', 'graffiti', 'rubble', 'pebble', 'smallrock'
+        'poster', 'graffiti', 'rubble', 'pebble', 'smallrock',
+        'flower', 'twig', 'branch', 'can', 'bottle', 'scrap', 'clutter'
     })
 end
 
@@ -105,11 +170,17 @@ local function optimize(obj)
     if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
 
     if visualEffect(obj) then
+        suppressEffect(obj)
+        return
+    end
+    if shootEffect(obj) and (obj:IsA('Light') or obj:IsA('Decal') or obj:IsA('Texture')) then
+        suppressEffect(obj)
+        return
+    end
+
+    if obj:IsA('BloomEffect') or obj:IsA('BlurEffect') or obj:IsA('SunRaysEffect')
+        or obj:IsA('DepthOfFieldEffect') or obj:IsA('ColorCorrectionEffect') then
         setSaved(obj, 'Enabled', false)
-        if obj:IsA('ParticleEmitter') then
-            setSaved(obj, 'Rate', 0)
-            pcall(function() obj:Clear() end)
-        end
         return
     end
 
@@ -127,7 +198,7 @@ local function optimize(obj)
     end
 
     if obj:IsA('Decal') or obj:IsA('Texture') then
-        if not isProtected(obj) then setSaved(obj, 'Transparency', 1) end
+        if not isProtected(obj) or shootEffect(obj) then setSaved(obj, 'Transparency', 1) end
         return
     end
 
@@ -154,7 +225,22 @@ local function optimize(obj)
             return
         end
         setSaved(obj, 'Material', Enum.Material.Plastic)
+        if not hasImportantAncestor(obj) then setSaved(obj, 'MaterialVariant', '') end
+        -- Flat, aggressively reduced palette for environmental geometry.
+        -- Do not recolor gameplay tools, character, or interactable parts.
+        local n = obj.Name:lower()
+        local c = obj.Color
+        local gray = math.floor((c.R * 0.299 + c.G * 0.587 + c.B * 0.114) * 255 / 64 + .5) * 64
+        gray = math.clamp(gray, 32, 192)
+        if nameContains(n, {'road', 'street', 'asphalt', 'pavement'}) then
+            setSaved(obj, 'Color', Color3.fromRGB(52, 52, 52))
+        elseif nameContains(n, {'sidewalk', 'concrete', 'curb'}) then
+            setSaved(obj, 'Color', Color3.fromRGB(112, 112, 112))
+        elseif not hasImportantAncestor(obj) then
+            setSaved(obj, 'Color', Color3.fromRGB(gray, gray, gray))
+        end
         setSaved(obj, 'Reflectance', 0)
+        if not hasImportantAncestor(obj) then setSaved(obj, 'Transparency', 0) end
         setSaved(obj, 'CastShadow', false)
         if obj:IsA('MeshPart') then
             setSaved(obj, 'TextureID', '')
@@ -182,7 +268,7 @@ end
 for _, property in ipairs({
     'Brightness', 'Ambient', 'OutdoorAmbient', 'ExposureCompensation',
     'GlobalShadows', 'EnvironmentDiffuseScale', 'EnvironmentSpecularScale',
-    'ShadowSoftness', 'FogColor', 'FogStart', 'FogEnd'
+    'ShadowSoftness', 'FogColor', 'FogStart', 'FogEnd', 'ClockTime', 'GeographicLatitude'
 }) do
     pcall(function() OriginalLighting[property] = Lighting[property] end)
 end
@@ -197,9 +283,15 @@ local function applyLighting()
             Lighting.EnvironmentDiffuseScale = 0
             Lighting.EnvironmentSpecularScale = 0
             Lighting.ShadowSoftness = 0
-            Lighting.FogColor = Color3.fromRGB(0, 0, 0)
-            Lighting.FogStart = 100000
-            Lighting.FogEnd = 1000000
+            Lighting.FogColor = GraySky
+            Lighting.FogStart = 180
+            Lighting.FogEnd = 900
+            Lighting.ClockTime = 12
+            Lighting.GeographicLatitude = 0
+            Lighting.Ambient = Color3.fromRGB(90, 90, 90)
+            Lighting.OutdoorAmbient = GraySky
+            Lighting.Brightness = 1
+            Lighting.ExposureCompensation = 0
         end)
     end
     if FullBright then
@@ -262,6 +354,7 @@ local function disable()
     Enabled = false
     Busy = true
     refresh()
+    for obj, connection in pairs(EffectGuards) do pcall(function() connection:Disconnect() end); EffectGuards[obj] = nil end
     for obj, properties in pairs(Saved) do
         for property, original in pairs(properties) do
             pcall(function() obj[property] = original[1] end)
@@ -285,7 +378,7 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V26'
+GUI.Name = 'FarhanStore_FPS_ONLY_EXTREME_V28'
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -445,11 +538,35 @@ bind(UIS.InputEnded, function(input)
 end)
 
 bind(game.DescendantAdded, function(obj)
-    if not Alive or not Enabled then return end
+    if not Alive then return end
+    if obj:IsDescendantOf(PlayerGui) or (GUI and obj:IsDescendantOf(GUI)) then
+        applyFont(obj)
+    end
+    if not Enabled then return end
     if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
     local valid = false
     pcall(function() valid = obj:IsDescendantOf(Workspace) or obj:IsDescendantOf(Lighting) or obj:IsDescendantOf(PlayerGui) end)
     if valid then pcall(optimize, obj) end
+end)
+
+task.spawn(function()
+    while Alive do
+        if Enabled and not Busy then
+            applyLighting()
+            -- Weather/time scripts may replace effects; only revisit the small effects set.
+            for _, root in ipairs({Lighting, Workspace.CurrentCamera}) do
+                if root then
+                    for _, obj in ipairs(root:GetDescendants()) do
+                        if not Alive or not Enabled then break end
+                        if visualEffect(obj) or obj:IsA('Sky') or obj:IsA('Atmosphere') or obj:IsA('Clouds') then
+                            pcall(optimize, obj)
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(2)
+    end
 end)
 
 local frames, lastFPS = 0, os.clock()
@@ -493,13 +610,21 @@ local function cleanup()
         end
     end
     FullBright = false
+    for obj, connection in pairs(EffectGuards) do pcall(function() connection:Disconnect() end); EffectGuards[obj] = nil end
     applyLighting()
+    for obj, connection in pairs(FontGuards) do pcall(function() connection:Disconnect() end); FontGuards[obj] = nil end
+    for obj, original in pairs(FontSaved) do
+        pcall(function() obj.FontFace = original end)
+        FontSaved[obj] = nil
+    end
     for _, connection in ipairs(Connections) do pcall(function() connection:Disconnect() end) end
     if GUI then GUI:Destroy() end
 end
 ENV.FarhanFPSOnlyCleanup = cleanup
+scanFonts(PlayerGui)
+scanFonts(GUI)
 refresh()
-print('FARHAN STORE | FPS ONLY EXTREME V2.6')
+print('FARHAN STORE')
 
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __ok then
