@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = {
-    AutoFireDelay = 0.16,
+    AutoFireDelay = 0.12,
     AutoPulse = 0.055,
     KillCreditWindow = 1.5,
     TargetDistance = 1000,
@@ -462,8 +462,69 @@ local function getCrosshairTarget()
     return nil
 end
 
+local ClickOnce = type(mouse1click) == "function" and mouse1click
+    or (type(ENV.mouse1click) == "function" and ENV.mouse1click or nil)
+local PressMouse = type(mouse1press) == "function" and mouse1press
+    or (type(ENV.mouse1press) == "function" and ENV.mouse1press or nil)
+local ReleaseMouse = type(mouse1release) == "function" and mouse1release
+    or (type(ENV.mouse1release) == "function" and ENV.mouse1release or nil)
+local VIM
+pcall(function() VIM = game:GetService("VirtualInputManager") end)
+local SyntheticDown = false
+local SyntheticUntil = 0
+local ClickBusy = false
+
+local function releaseSynthetic()
+    if not SyntheticDown then return end
+    SyntheticDown = false
+    if ReleaseMouse then
+        pcall(ReleaseMouse)
+    elseif VIM then
+        local pos = UIS:GetMouseLocation()
+        pcall(function()
+            VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+        end)
+    end
+end
+
+local function sendRealClick()
+    if ClickBusy then return false, "BUSY" end
+    ClickBusy = true
+    SyntheticUntil = os.clock() + 0.20
+    if ClickOnce then
+        local ok = pcall(ClickOnce)
+        ClickBusy = false
+        return ok, ok and "CLICK SENT" or "CLICK ERROR"
+    end
+    if not ((PressMouse and ReleaseMouse) or VIM) then
+        ClickBusy = false
+        return false, "NO CLICK API"
+    end
+    local ok
+    if PressMouse and ReleaseMouse then
+        ok = pcall(PressMouse)
+    else
+        local pos = UIS:GetMouseLocation()
+        ok = pcall(function()
+            VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+        end)
+    end
+    if not ok then
+        ClickBusy = false
+        return false, "CLICK BLOCKED"
+    end
+    SyntheticDown = true
+    task.delay(Config.AutoPulse, function()
+        releaseSynthetic()
+        ClickBusy = false
+    end)
+    return true, "CLICK SENT"
+end
+
 local function stopFire()
     AutoPulseId += 1
+    releaseSynthetic()
+    ClickBusy = false
     if ActiveTool then
         pcall(function() ActiveTool:Deactivate() end)
         ActiveTool = nil
@@ -528,21 +589,12 @@ local function tryAutoFire()
     if ActiveTool then stopFire() end
     LastFire = now
     RecentTargets[humanoid] = now
-    AutoPulseId += 1
-    local pulse = AutoPulseId
     FireAttempts += 1
-    local ok = pcall(function() tool:Activate() end)
-    LastFireResult = ok and "FIRE SENT" or "ACTIVATE ERROR"
+    local ok, status = sendRealClick()
+    LastFireResult = status
     if ok then
         ActiveTool = tool
         LastAutoTarget = humanoid
-        task.delay(Config.AutoPulse, function()
-            if not Alive or pulse ~= AutoPulseId then return end
-            if ActiveTool == tool and not ManualHeld then
-                pcall(function() tool:Deactivate() end)
-                ActiveTool = nil
-            end
-        end)
     end
 end
 
@@ -698,7 +750,7 @@ bind(UIS.InputEnded, function(input)
 end)
 
 bind(UIS.InputBegan, function(input, processed)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed and os.clock() > SyntheticUntil then
         stopFire()
         ManualHeld = true
         markShotTarget()
@@ -716,7 +768,7 @@ bind(UIS.InputBegan, function(input, processed)
 end)
 
 bind(UIS.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and os.clock() > SyntheticUntil then
         ManualHeld = false
         ManualFireUntil = os.clock() + 0.2
     end
@@ -871,4 +923,4 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+print("FARHAN STORE | BLUE BLACK V4.1 | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
