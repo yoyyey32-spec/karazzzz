@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
@@ -36,11 +35,11 @@ local State = {
 }
 
 local Theme = {
-    Background = Color3.fromRGB(7, 15, 27),
-    Secondary = Color3.fromRGB(15, 35, 59),
-    Blue = Color3.fromRGB(25, 135, 255),
+    Background = Color3.fromRGB(7, 7, 18),
+    Secondary = Color3.fromRGB(20, 18, 41),
+    Blue = Color3.fromRGB(151, 123, 255),
     Text = Color3.fromRGB(235, 245, 255),
-    Off = Color3.fromRGB(52, 72, 94)
+    Off = Color3.fromRGB(51, 48, 75)
 }
 
 local Colors = {
@@ -94,15 +93,15 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_BlueBlack_V54_MACRO_LINE"
+Gui.Name = "FarhanStore_GalaxyEdge_V55_MACRO"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(205, 235)
-Main.Position = UDim2.new(0, 35, 0.5, -117)
+Main.Size = UDim2.fromOffset(215, 240)
+Main.Position = UDim2.new(0, 35, 0.5, -120)
 Main.BackgroundColor3 = Theme.Background
 Main.BackgroundTransparency = 0.06
 Main.BorderSizePixel = 0
@@ -134,11 +133,11 @@ Title.Size = UDim2.new(1, -12, 0, 25)
 Title.Position = UDim2.fromOffset(6, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "Farhan Store"
-Title.TextColor3 = Color3.fromRGB(85, 180, 255)
+Title.TextColor3 = Color3.fromRGB(185, 166, 255)
 Title.TextStrokeTransparency = 0.65
 Title.Parent = Header
 styleText(Title, 14)
-Title.TextColor3 = Color3.fromRGB(85, 180, 255)
+Title.TextColor3 = Color3.fromRGB(185, 166, 255)
 
 local Subtitle = Instance.new("TextLabel")
 Subtitle.Name = "MacroSubtitle"
@@ -149,12 +148,12 @@ Subtitle.Text = "MACRO"
 Subtitle.TextXAlignment = Enum.TextXAlignment.Center
 Subtitle.Parent = Header
 styleText(Subtitle, 21)
-Subtitle.TextColor3 = Color3.fromRGB(85, 180, 255)
+Subtitle.TextColor3 = Color3.fromRGB(185, 166, 255)
 
 local HeaderLine = Instance.new("Frame")
 HeaderLine.Size = UDim2.new(1, -26, 0, 2)
 HeaderLine.Position = UDim2.fromOffset(13, 49)
-HeaderLine.BackgroundColor3 = Color3.fromRGB(55, 160, 255)
+HeaderLine.BackgroundColor3 = Color3.fromRGB(151, 123, 255)
 HeaderLine.BackgroundTransparency = 0.08
 HeaderLine.BorderSizePixel = 0
 HeaderLine.Parent = Main
@@ -171,7 +170,7 @@ local function makeToggle(name, y, key)
 
     local Toggle = Instance.new("TextButton")
     Toggle.Size = UDim2.fromOffset(42, 21)
-    Toggle.Position = UDim2.fromOffset(150, y + 2)
+    Toggle.Position = UDim2.fromOffset(160, y + 2)
     Toggle.BackgroundColor3 = Theme.Off
     Toggle.BorderSizePixel = 0
     Toggle.Text = ""
@@ -220,7 +219,7 @@ styleText(ColorLabel, 12)
 
 local ColorButton = Instance.new("TextButton")
 ColorButton.Size = UDim2.fromOffset(109, 24)
-ColorButton.Position = UDim2.fromOffset(83, 185)
+ColorButton.Position = UDim2.fromOffset(93, 185)
 ColorButton.BackgroundColor3 = Theme.Secondary
 ColorButton.Text = ""
 ColorButton.BorderSizePixel = 0
@@ -228,7 +227,7 @@ ColorButton.Parent = Main
 round(ColorButton, 6)
 
 local ColorStroke = Instance.new("UIStroke")
-ColorStroke.Color = Color3.fromRGB(36, 104, 171)
+ColorStroke.Color = Color3.fromRGB(151, 123, 255)
 ColorStroke.Thickness = 1
 ColorStroke.Parent = ColorButton
 
@@ -257,11 +256,11 @@ styleText(Arrow, 10)
 
 local Dropdown = Instance.new("Frame")
 Dropdown.Size = UDim2.fromOffset(109, 81)
-Dropdown.Position = UDim2.fromOffset(83, 212)
+Dropdown.Position = UDim2.fromOffset(93, 212)
 Dropdown.BackgroundColor3 = Theme.Background
 Dropdown.BorderSizePixel = 0
 Dropdown.Visible = false
-Dropdown.ZIndex = 10
+Dropdown.ZIndex = 30
 Dropdown.Parent = Main
 round(Dropdown, 6)
 
@@ -283,7 +282,7 @@ for index, name in ipairs({"Kuning", "Biru", "Merah"}) do
     Option.BackgroundTransparency = 0.25
     Option.Text = "●  " .. name
     Option.TextColor3 = Colors[name]
-    Option.ZIndex = 11
+    Option.ZIndex = 31
     Option.Parent = Dropdown
     styleText(Option, 11)
     Option.TextColor3 = Colors[name]
@@ -293,6 +292,7 @@ for index, name in ipairs({"Kuning", "Biru", "Merah"}) do
         State.Color = name
         DropdownOpen = false
         Dropdown.Visible = false
+        Main.Size = UDim2.fromOffset(215, 240)
         Arrow.Text = "▼"
         refreshColor()
     end)
@@ -301,8 +301,54 @@ end
 bind(ColorButton.MouseButton1Click, function()
     DropdownOpen = not DropdownOpen
     Dropdown.Visible = DropdownOpen
+    Main.Size = UDim2.fromOffset(215, DropdownOpen and 306 or 240)
     Arrow.Text = DropdownOpen and "▲" or "▼"
 end)
+
+local Stars = Instance.new("Frame")
+Stars.Name = "GalaxyStarfall"
+Stars.Size = UDim2.fromScale(1, 1)
+Stars.BackgroundTransparency = 1
+Stars.BorderSizePixel = 0
+Stars.Active = false
+Stars.ClipsDescendants = true
+Stars.ZIndex = 12
+Stars.Parent = Main
+
+local StarColors = {
+    Color3.fromRGB(245, 242, 255),
+    Color3.fromRGB(174, 152, 255),
+    Color3.fromRGB(117, 184, 255)
+}
+local StarRandom = Random.new()
+for i = 1, 12 do
+    local star = Instance.new("TextLabel")
+    star.Name = "FallingStar" .. i
+    star.Size = UDim2.fromOffset(12, 14)
+    star.BackgroundTransparency = 1
+    star.Text = i % 3 == 0 and "✦" or "✧"
+    star.Font = Enum.Font.GothamBold
+    star.TextSize = StarRandom:NextInteger(9, 13)
+    star.TextColor3 = StarColors[(i % #StarColors) + 1]
+    star.TextTransparency = StarRandom:NextNumber(0.08, 0.28)
+    star.Active = false
+    star.ZIndex = 12
+    star.Parent = Stars
+    task.spawn(function()
+        task.wait(StarRandom:NextNumber(0, 3))
+        while Alive and star.Parent do
+            local x = StarRandom:NextNumber(0.15, 0.95)
+            star.Position = UDim2.new(x, 0, 0, -15)
+            local fall = TweenService:Create(star, TweenInfo.new(StarRandom:NextNumber(2.8, 5), Enum.EasingStyle.Linear), {
+                Position = UDim2.new(math.max(0, x - StarRandom:NextNumber(0.07, 0.23)), 0, 1, 15)
+            })
+            fall:Play()
+            fall.Completed:Wait()
+            if not Alive then break end
+            task.wait(StarRandom:NextNumber(0.1, 0.8))
+        end
+    end)
+end
 
 local Effect = Instance.new("Frame")
 Effect.Name = "KillEffect"
@@ -766,6 +812,7 @@ bind(UIS.InputBegan, function(input, processed)
         Main.Visible = State.Visible
         Dropdown.Visible = false
         DropdownOpen = false
+        Main.Size = UDim2.fromOffset(215, 240)
         Arrow.Text = "▼"
     end
 end)
@@ -924,4 +971,4 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | BLUE BLACK V4.1 | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
