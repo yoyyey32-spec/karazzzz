@@ -1,4 +1,4 @@
-print('[Farhan FPS] V3.3 Midnight Blue: script started')
+print('[Farhan FPS] V3.5 MIDNIGHT BLUE CLEAN START')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -21,6 +21,7 @@ end
 if type(ENV.FarhanFPSOnlyCleanup) == 'function' then
     pcall(ENV.FarhanFPSOnlyCleanup)
 end
+ENV.FarhanFPSOnlyCleanup = nil
 
 local Alive, Enabled, FullBright, Busy, Minimized = true, false, false, false, false
 local Saved = {}
@@ -456,8 +457,9 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_MIDNIGHT_BLUE_V34'
+GUI.Name = 'FarhanStore_FPS_MIDNIGHT_BLUE_V35'
 GUI.ResetOnSpawn = false
+GUI.DisplayOrder = 150
 GUI.IgnoreGuiInset = true
 GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GUI.Parent = PlayerGui
@@ -764,7 +766,7 @@ ENV.FarhanFPSOnlyCleanup = cleanup
 scanFonts(PlayerGui)
 scanFonts(GUI)
 refresh()
-print('FARHAN STORE | FPS MIDNIGHT BLUE V3.3')
+print('FARHAN STORE | FPS MIDNIGHT BLUE V3.5 GUI READY')
 
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __ok then
