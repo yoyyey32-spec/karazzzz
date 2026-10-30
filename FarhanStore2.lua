@@ -1,4 +1,4 @@
-print('[Farhan Macro V5.6] Launching...')
+print('[Farhan Macro V5.7] GALAXY EDGE START')
 local __macroOK, __macroERR = xpcall(function()
 
 local Players = game:GetService("Players")
@@ -22,15 +22,15 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 local ENV = getgenv and getgenv() or _G
 
+if type(ENV.FarhanLiteCleanup) == "function" then
+    pcall(ENV.FarhanLiteCleanup)
+end
+ENV.FarhanLiteCleanup = nil
 -- Remove older GUI panels, including ones whose cleanup callback was lost.
 for _, child in ipairs(PlayerGui:GetChildren()) do
     if child:IsA('ScreenGui') and (child.Name:match('^FarhanStore_.*MACRO') or child.Name == 'FarhanMacroStartupError') then
         pcall(function() child:Destroy() end)
     end
-end
-
-if type(ENV.FarhanLiteCleanup) == "function" then
-    pcall(ENV.FarhanLiteCleanup)
 end
 
 local Alive = true
@@ -103,8 +103,9 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_GalaxyEdge_V56_MACRO"
+Gui.Name = "FarhanStore_GalaxyEdge_V57_MACRO"
 Gui.ResetOnSpawn = false
+Gui.DisplayOrder = 151
 Gui.IgnoreGuiInset = true
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
@@ -909,7 +910,7 @@ end
 
 bind(Player.CharacterAdded, watchCharacter)
 
-local Backpack = Player:WaitForChild("Backpack")
+local Backpack = Player:FindFirstChildOfClass("Backpack") or Player:WaitForChild("Backpack", 5)
 
 bind(Backpack.ChildAdded, function(child)
     watchTool(child)
@@ -981,10 +982,10 @@ ENV.FarhanLiteKillEffectPreview = playKillEffect
 refreshButtons()
 refreshColor()
 
-print("FARHAN STORE | GALAXY EDGE V5.5 | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
+print("FARHAN STORE | GALAXY EDGE V5.7 GUI READY | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __macroOK then
-    warn('[Farhan Macro V5.6] STARTUP ERROR: ' .. tostring(__macroERR))
+    warn('[Farhan Macro V5.7] STARTUP ERROR: ' .. tostring(__macroERR))
     pcall(function()
         local p = game:GetService('Players').LocalPlayer:WaitForChild('PlayerGui')
         local old = p:FindFirstChild('FarhanMacroStartupError')
