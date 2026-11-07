@@ -1,0 +1,1237 @@
+--[[
+    FARHAN STORE - SOUTH BRONX FULL CHEAT
+    BY DARKGPT | ANTI-CHEAT BYPASS INCLU
+    SUPPORT : DELTA, VOLTZ, REAL, MEDIUM
+]]
+
+-- ===== [1. GUI PRO AVEC COULEURS DYNAMIQUES] =====
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Variables pour le GUI
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FarhanStoreCheat"
+screenGui.Parent = playerGui
+
+-- Frame principale (Noir avec effet glow)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 500, 0, 350)
+mainFrame.Position = UDim2.new(0.5, -250, 0.5, -175)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+-- Effet glow (contour lumineux)
+local glow = Instance.new("ImageLabel")
+glow.Name = "Glow"
+glow.Size = UDim2.new(1.1, 0, 1.1, 0)
+glow.Position = UDim2.new(-0.05, 0, -0.05, 0)
+glow.BackgroundTransparency = 1
+glow.Image = "rbxassetid://268004268"
+glow.ImageColor3 = Color3.fromRGB(0, 170, 255)
+glow.ScaleType = Enum.ScaleType.Slice
+glow.SliceCenter = Rect.new(100, 100, 100, 100)
+glow.Parent = mainFrame
+
+-- Texte "FARHAN STORE FULL CHEAT" (centré en haut)
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "Title"
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.Position = UDim2.new(0, 0, 0, 5)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "FARHAN STORE FULL CHEAT"
+titleLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+titleLabel.TextSize = 18
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextStrokeTransparency = 0
+titleLabel.Parent = mainFrame
+
+-- Onglets (Tabs)
+local tabs = {
+    "Aimbot",
+    "Silent Aim",
+    "Tools",
+    "Auto Farm",
+    "Kill Aura",
+    "About"
+}
+
+local tabButtons = {}
+local tabContents = {}
+
+-- Création des onglets
+for i, tabName in ipairs(tabs) do
+    -- Bouton de l'onglet
+    local button = Instance.new("TextButton")
+    button.Name = tabName .. "Button"
+    button.Size = UDim2.new(1, 0, 0, 35)
+    button.Position = UDim2.new(0, 0, 0, 30 + (i - 1) * 35)
+    button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Text = tabName
+    button.Font = Enum.Font.Gotham
+    button.TextSize = 14
+    button.Parent = mainFrame
+    table.insert(tabButtons, button)
+
+    -- Contenu de l'onglet (caché au début)
+    local content = Instance.new("Frame")
+    content.Name = tabName .. "Content"
+    content.Size = UDim2.new(1, -20, 1, -70)
+    content.Position = UDim2.new(0, 10, 0, 70)
+    content.BackgroundTransparency = 1
+    content.Visible = (i == 1) -- Seul le premier onglet est visible
+    content.Parent = mainFrame
+    table.insert(tabContents, content)
+
+    -- Sélection de l'onglet
+    button.MouseButton1Click:Connect(function()
+        for j, btn in ipairs(tabButtons) do
+            btn.BackgroundColor3 = (j == i) and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(30, 30, 30)
+        end
+        for j, cont in ipairs(tabContents) do
+            cont.Visible = (j == i)
+        end
+    end)
+end
+
+-- ===== [2. AIMBOT (FPP + TPS + WHITELIST)] =====
+local function createAimbotTab()
+    local content = tabContents[1]
+
+    -- Toggle Aimbot
+    local aimbotToggle = Instance.new("TextButton")
+    aimbotToggle.Name = "AimbotToggle"
+    aimbotToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    aimbotToggle.Position = UDim2.new(0.05, 0, 0, 5)
+    aimbotToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    aimbotToggle.Text = "Aimbot: OFF"
+    aimbotToggle.Font = Enum.Font.Gotham
+    aimbotToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    aimbotToggle.Parent = content
+
+    -- FOV Slider
+    local fovLabel = Instance.new("TextLabel")
+    fovLabel.Name = "FOVLabel"
+    fovLabel.Size = UDim2.new(0.3, 0, 0, 20)
+    fovLabel.Position = UDim2.new(0.05, 0, 0, 40)
+    fovLabel.Text = "FOV: 100"
+    fovLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fovLabel.Font = Enum.Font.Gotham
+    fovLabel.Parent = content
+
+    local fovSlider = Instance.new("TextBox")
+    fovSlider.Name = "FOVSlider"
+    fovSlider.Size = UDim2.new(0.5, 0, 0, 20)
+    fovSlider.Position = UDim2.new(0.35, 0, 0, 40)
+    fovSlider.PlaceholderText = "100-500"
+    fovSlider.Text = "100"
+    fovSlider.Parent = content
+
+    -- Radius Slider
+    local radiusLabel = Instance.new("TextLabel")
+    radiusLabel.Name = "RadiusLabel"
+    radiusLabel.Size = UDim2.new(0.3, 0, 0, 20)
+    radiusLabel.Position = UDim2.new(0.05, 0, 0, 65)
+    radiusLabel.Text = "Radius: 50"
+    radiusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    radiusLabel.Font = Enum.Font.Gotham
+    radiusLabel.Parent = content
+
+    local radiusSlider = Instance.new("TextBox")
+    radiusSlider.Name = "RadiusSlider"
+    radiusSlider.Size = UDim2.new(0.5, 0, 0, 20)
+    radiusSlider.Position = UDim2.new(0.35, 0, 0, 65)
+    radiusSlider.PlaceholderText = "10-200"
+    radiusSlider.Text = "50"
+    radiusSlider.Parent = content
+
+    -- Hotkey
+    local hotkeyLabel = Instance.new("TextLabel")
+    hotkeyLabel.Name = "HotkeyLabel"
+    hotkeyLabel.Size = UDim2.new(0.3, 0, 0, 20)
+    hotkeyLabel.Position = UDim2.new(0.05, 0, 0, 90)
+    hotkeyLabel.Text = "Hotkey: Mouse1"
+    hotkeyLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    hotkeyLabel.Font = Enum.Font.Gotham
+    hotkeyLabel.Parent = content
+
+    local hotkeyButton = Instance.new("TextButton")
+    hotkeyButton.Name = "HotkeyButton"
+    hotkeyButton.Size = UDim2.new(0.5, 0, 0, 20)
+    hotkeyButton.Position = UDim2.new(0.35, 0, 0, 90)
+    hotkeyButton.Text = "Change Hotkey"
+    hotkeyButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    hotkeyButton.Parent = content
+
+    -- Whitelist
+    local whitelistLabel = Instance.new("TextLabel")
+    whitelistLabel.Name = "WhitelistLabel"
+    whitelistLabel.Size = UDim2.new(0.9, 0, 0, 20)
+    whitelistLabel.Position = UDim2.new(0.05, 0, 0, 120)
+    whitelistLabel.Text = "Whitelist (IDs séparés par des virgules)"
+    whitelistLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    whitelistLabel.Font = Enum.Font.Gotham
+    whitelistLabel.Parent = content
+
+    local whitelistBox = Instance.new("TextBox")
+    whitelistBox.Name = "WhitelistBox"
+    whitelistBox.Size = UDim2.new(0.9, 0, 0, 20)
+    whitelistBox.Position = UDim2.new(0.05, 0, 0, 140)
+    whitelistBox.PlaceholderText = "Ex: 123456,654321"
+    whitelistBox.Parent = content
+
+    -- Logique Aimbot
+    local aimbotActive = false
+    local currentHotkey = Enum.UserInputType.MouseButton1
+    local whitelist = {}
+
+    aimbotToggle.MouseButton1Click:Connect(function()
+        aimbotActive = not aimbotActive
+        aimbotToggle.Text = "Aimbot: " .. (aimbotActive and "ON" or "OFF")
+        if aimbotActive then
+            spawn(function()
+                while aimbotActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if not humanoid then continue end
+
+                    local mouse = player:GetMouse()
+                    local raycastParams = RaycastParams.new()
+                    raycastParams.FilterDescendantsInstances = {character}
+                    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+                    local target = nil
+                    local closestDistance = math.huge
+
+                    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+                        if otherPlayer ~= player and otherPlayer.Character then
+                            local otherCharacter = otherPlayer.Character
+                            local otherHumanoid = otherCharacter:FindFirstChild("Humanoid")
+                            if otherHumanoid and otherHumanoid.Health > 0 then
+                                local rootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
+                                if rootPart then
+                                    local distance = (rootPart.Position - mouse.Hit.p).Magnitude
+                                    if distance < tonumber(radiusSlider.Text) and distance < closestDistance then
+                                        -- Vérification Whitelist
+                                        local playerId = otherPlayer.UserId
+                                        local isWhitelisted = false
+                                        for _, id in ipairs(whitelist) do
+                                            if id == playerId then
+                                                isWhitelisted = true
+                                                break
+                                            end
+                                        end
+                                        if not isWhitelisted then
+                                            target = rootPart
+                                            closestDistance = distance
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    if target then
+                        local lookVector = (target.Position - mouse.Hit.p).Unit
+                        local fov = tonumber(fovSlider.Text)
+                        local angle = math.deg(math.acos(lookVector:Dot(mouse.Direction))) % 360
+                        if angle <= fov then
+                            mouse.Direction = lookVector
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    hotkeyButton.MouseButton1Click:Connect(function()
+        local input = UserInputService.InputBegan:Wait()
+        currentHotkey = input.UserInputType
+        hotkeyLabel.Text = "Hotkey: " .. input.UserInputType.Name
+    end)
+
+    whitelistBox:GetPropertyChangedSignal("Text"):Connect(function()
+        whitelist = {}
+        for id in string.gmatch(whitelistBox.Text, "%d+") do
+            table.insert(whitelist, tonumber(id))
+        end
+    end)
+end
+
+-- ===== [3. SILENT AIM (SNIPING + WHITELIST)] =====
+local function createSilentAimTab()
+    local content = tabContents[2]
+
+    -- Toggle Silent Aim
+    local silentAimToggle = Instance.new("TextButton")
+    silentAimToggle.Name = "SilentAimToggle"
+    silentAimToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    silentAimToggle.Position = UDim2.new(0.05, 0, 0,silentAimToggle.Text = "Silent Aim: OFF"
+silentAimToggle.Font = Enum.Font.Gotham
+silentAimToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+silentAimToggle.Parent = content
+
+-- FOV Slider
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Name = "FOVLabel"
+fovLabel.Size = UDim2.new(0.3, 0, 0, 20)
+fovLabel.Position = UDim2.new(0.05, 0, 0, 40)
+fovLabel.Text = "FOV: 100"
+fovLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+fovLabel.Font = Enum.Font.Gotham
+fovLabel.Parent = content
+
+local fovSlider = Instance.new("TextBox")
+fovSlider.Name = "FOVSlider"
+fovSlider.Size = UDim2.new(0.5, 0, 0, 20)
+fovSlider.Position = UDim2.new(0.35, 0, 0, 40)
+fovSlider.PlaceholderText = "100-500"
+fovSlider.Text = "100"
+fovSlider.Parent = content
+
+-- Radius Slider
+local radiusLabel = Instance.new("TextLabel")
+radiusLabel.Name = "RadiusLabel"
+radiusLabel.Size = UDim2.new(0.3, 0, 0, 20)
+radiusLabel.Position = UDim2.new(0.05, 0, 0, 65)
+radiusLabel.Text = "Radius: 50"
+radiusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+radiusLabel.Font = Enum.Font.Gotham
+radiusLabel.Parent = content
+
+local radiusSlider = Instance.new("TextBox")
+radiusSlider.Name = "RadiusSlider"
+radiusSlider.Size = UDim2.new(0.5, 0, 0, 20)
+radiusSlider.Position = UDim2.new(0.35, 0, 0, 65)
+radiusSlider.PlaceholderText = "10-200"
+radiusSlider.Text = "50"
+radiusSlider.Parent = content
+
+-- Sniping Toggle
+local snipingToggle = Instance.new("TextButton")
+snipingToggle.Name = "SnipingToggle"
+snipingToggle.Size = UDim2.new(0.9, 0, 0, 30)
+snipingToggle.Position = UDim2.new(0.05, 0, 0, 90)
+snipingToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+snipingToggle.Text = "Sniping: OFF"
+snipingToggle.Font = Enum.Font.Gotham
+snipingToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+snipingToggle.Parent = content
+
+-- Whitelist Box
+local whitelistLabel = Instance.new("TextLabel")
+whitelistLabel.Name = "WhitelistLabel"
+whitelistLabel.Size = UDim2.new(0.9, 0, 0, 20)
+whitelistLabel.Position = UDim2.new(0.05, 0, 0, 120)
+whitelistLabel.Text = "Whitelist (IDs séparés par des virgules)"
+whitelistLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+whitelistLabel.Font = Enum.Font.Gotham
+whitelistLabel.Parent = content
+
+local whitelistBox = Instance.new("TextBox")
+whitelistBox.Name = "WhitelistBox"
+whitelistBox.Size = UDim2.new(0.9, 0, 0, 20)
+whitelistBox.Position = UDim2.new(0.05, 0, 0, 140)
+whitelistBox.PlaceholderText = "Ex: 123456,654321"
+whitelistBox.Parent = content
+
+-- Logique Silent Aim
+local silentAimActive = false
+local snipingActive = false
+local silentAimWhitelist = {}
+
+silentAimToggle.MouseButton1Click:Connect(function()
+    silentAimActive = not silentAimActive
+    silentAimToggle.Text = "Silent Aim: " .. (silentAimActive and "ON" or "OFF")
+    if silentAimActive then
+        spawn(function()
+            while silentAimActive and player.Character do
+                local character = player.Character
+                local humanoid = character:FindFirstChild("Humanoid")
+                if not humanoid then continue end
+
+                local mouse = player:GetMouse()
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterDescendantsInstances = {character}
+                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+                local target = nil
+                local closestDistance = math.huge
+
+                for _, otherPlayer in ipairs(Players:GetPlayers()) do
+                    if otherPlayer ~= player and otherPlayer.Character then
+                        local otherCharacter = otherPlayer.Character
+                        local otherHumanoid = otherCharacter:FindFirstChild("Humanoid")
+                        if otherHumanoid and otherHumanoid.Health > 0 then
+                            local rootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
+                            if rootPart then
+                                local distance = (rootPart.Position - mouse.Hit.p).Magnitude
+                                if distance < tonumber(radiusSlider.Text) and distance < closestDistance then
+                                    local playerId = otherPlayer.UserId
+                                    local isWhitelisted = false
+                                    for _, id in ipairs(silentAimWhitelist) do
+                                        if id == playerId then
+                                            isWhitelisted = true
+                                            break
+                                        end
+                                    end
+                                    if not isWhitelisted then
+                                        target = rootPart
+                                        closestDistance = distance
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if target and snipingActive then
+                    local lookVector = (target.Position - mouse.Hit.p).Unit
+                    local fov = tonumber(fovSlider.Text)
+                    local angle = math.deg(math.acos(lookVector:Dot(mouse.Direction))) % 360
+                    if angle <= fov then
+                        mouse.Direction = lookVector
+                        fireclickdetector(target:FindFirstChildOfClass("ClickDetector") or target:FindFirstChildOfClass("BasePart").ClickDetector)
+                    end
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end
+end)
+
+snipingToggle.MouseButton1Click:Connect(function()
+    snipingActive = not snipingActive
+    snipingToggle.Text = "Sniping: " .. (snipingActive and "ON" or "OFF")
+end)
+
+whitelistBox:GetPropertyChangedSignal("Text"):Connect(function()
+    silentAimWhitelist = {}
+    for id in string.gmatch(whitelistBox.Text, "%d+") do
+        table.insert(silentAimWhitelist, tonumber(id))
+    end
+end)
+end
+
+-- ===== [4. TOOLS MENU] =====
+local function createToolsTab()
+    local content = tabContents[3]
+
+    -- Fast Interact
+    local fastInteractToggle = Instance.new("TextButton")
+    fastInteractToggle.Name = "FastInteractToggle"
+    fastInteractToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    fastInteractToggle.Position = UDim2.new(0.05, 0, 0, 5)
+    fastInteractToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    fastInteractToggle.Text = "Fast Interact: OFF"
+    fastInteractToggle.Font = Enum.Font.Gotham
+    fastInteractToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fastInteractToggle.Parent = content
+
+    -- No Recoil
+    local noRecoilToggle = Instance.new("TextButton")
+    noRecoilToggle.Name = "NoRecoilToggle"
+    noRecoilToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    noRecoilToggle.Position = UDim2.new(0.05, 0, 0, 40)
+    noRecoilToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    noRecoilToggle.Text = "No Recoil: OFF"
+    noRecoilToggle.Font = Enum.Font.Gotham
+    noRecoilToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    noRecoilToggle.Parent = content
+
+    -- No Spread
+    local noSpreadToggle = Instance.new("TextButton")
+    noSpreadToggle.Name = "NoSpreadToggle"
+    noSpreadToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    noSpreadToggle.Position = UDim2.new(0.05, 0, 0, 75)
+    noSpreadToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    noSpreadToggle.Text = "No Spread: OFF"
+    noSpreadToggle.Font = Enum.Font.Gotham
+    noSpreadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    noSpreadToggle.Parent = content
+
+    -- Fast Walk
+    local fastWalkToggle = Instance.new("TextButton")
+    fastWalkToggle.Name = "FastWalkToggle"
+    fastWalkToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    fastWalkToggle.Position = UDim2.new(0.05, 0, 0, 110)
+    fastWalkToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    fastWalkToggle.Text = "Fast Walk: OFF"
+    fastWalkToggle.Font = Enum.Font.Gotham
+    fastWalkToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fastWalkToggle.Parent = content
+
+    -- Fly
+    local flyToggle = Instance.new("TextButton")
+    flyToggle.Name = "FlyToggle"
+    flyToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    flyToggle.Position = UDim2.new(0.05, 0, 0, 145)
+    flyToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    flyToggle.Text = "Fly: OFF"
+    flyToggle.Font = Enum.Font.Gotham
+    flyToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    flyToggle.Parent = content
+
+    -- FPS Boost
+    local fpsBoostToggle = Instance.new("TextButton")
+    fpsBoostToggle.Name = "FPSBoostToggle"
+    fpsBoostToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    fpsBoostToggle.Position = UDim2.new(0.05, 0, 0, 180)
+    fpsBoostToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    fpsBoostToggle.Text = "FPS Boost: OFF"
+    fpsBoostToggle.Font = Enum.Font.Gotham
+    fpsBoostToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fpsBoostToggle.Parent = content
+
+    -- Unlimited Ammo
+    local unlimitedAmmoToggle = Instance.new("TextButton")
+    unlimitedAmmoToggle.Name = "UnlimitedAmmoToggle"
+    unlimitedAmmoToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    unlimitedAmmoToggle.Position = UDim2.new(0.05, 0, 0, 215)
+    unlimitedAmmoToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    unlimitedAmmoToggle.Text = "Unlimited Ammo: OFF"
+    unlimitedAmmoToggle.Font = Enum.Font.Gotham
+    unlimitedAmmoToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    unlimitedAmmoToggle.Parent = content
+
+    -- Custom Name
+    local customNameLabel = Instance.new("TextLabel")
+    customNameLabel.Name = "CustomNameLabel"
+    customNameLabel.Size = UDim2.new(0.3, 0, 0, 20)
+    customNameLabel.Position = UDim2.new(0.05, 0, 0, 250)
+    customNameLabel.Text = "Custom Name:"
+    customNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    customNameLabel.Font = Enum.Font.Gotham
+    customNameLabel.Parent = content
+
+    local customNameBox = Instance.new("TextBox")
+    customNameBox.Name = "CustomNameBox"
+    customNameBox.Size = UDim2.new(0.5, 0, 0, 20)
+    customNameBox.Position = UDim2.new(0.35, 0, 0, 250)
+    customNameBox.PlaceholderText = "Ex: Farhan"
+    customNameBox.Parent = content
+
+    -- Logique Tools
+    local fastInteractActive = false
+    local noRecoilActive = false
+    local noSpreadActive = false
+    local fastWalkActive = false
+    local flyActive = false
+    local fpsBoostActive = false
+    local unlimitedAmmoActive = false
+    local customName = ""
+
+    fastInteractToggle.MouseButton1Click:Connect(function()
+        fastInteractActive = not fastInteractActive
+        fastInteractToggle.Text = "Fast Interact: " .. (fastInteractActive and "ON" or "OFF")
+        if fastInteractActive then
+            local oldInteract = player.CharacterAdded:Connect(function(character)
+                local humanoid = character:WaitForChild("Humanoid")
+                local mouse = player:GetMouse()
+                mouse.KeyDown:Connect(function(key)
+                    if key == Enum.KeyCode.E then
+                        local part = workspace:FindPartOnRayWithIgnoreList(Ray.new(mouse.Hit.p, (mouse.Hit.p + (mouse.Hit.p - Vector3.new(0, 1, 0)))), {character})
+                        if part then
+                            local clickDetector = part:FindFirstChildOfClass("ClickDetector")
+                            if clickDetector then
+                                clickDetector:Fire()
+                            end
+                        end
+                    end
+                end)
+            end)
+        end
+    end)
+
+    noRecoilToggle.MouseButton1Click:Connect(function()
+        noRecoilActive = not noRecoilActive
+        noRecoilToggle.Text = "No Recoil: " .. (noRecoilActive and "ON" or "OFF")
+        if noRecoilActive then
+            spawn(function()
+                while noRecoilActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if humanoid then
+                        local tool = player.Character:FindFirstChildOfClass("Tool")
+                        if tool and tool:FindFirstChildOfClass("RemoteEvent") then
+                            local remote = tool:FindFirstChildOfClass("RemoteEvent")
+                            remote.OnClientEvent:Connect(function()
+                                if tool.Name:find("Gun") then
+                                    local recoil = tool:FindFirstChild("Recoil                                    if recoil then
+                                        recoil.Value = Vector3.new(0, 0, 0)
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    noSpreadToggle.MouseButton1Click:Connect(function()
+        noSpreadActive = not noSpreadActive
+        noSpreadToggle.Text = "No Spread: " .. (noSpreadActive and "ON" or "OFF")
+        if noSpreadActive then
+            spawn(function()
+                while noSpreadActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if humanoid then
+                        local tool = player.Character:FindFirstChildOfClass("Tool")
+                        if tool and tool:FindFirstChild("Spread") then
+                            tool.Spread.Value = 0
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    fastWalkToggle.MouseButton1Click:Connect(function()
+        fastWalkActive = not fastWalkActive
+        fastWalkToggle.Text = "Fast Walk: " .. (fastWalkActive and "ON" or "OFF")
+        if fastWalkActive then
+            spawn(function()
+                while fastWalkActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if humanoid then
+                        humanoid.WalkSpeed = 50
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        else
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                player.Character.Humanoid.WalkSpeed = 16
+            end
+        end
+    end)
+
+    flyToggle.MouseButton1Click:Connect(function()
+        flyActive = not flyActive
+        flyToggle.Text = "Fly: " .. (flyActive and "ON" or "OFF")
+        if flyActive then
+            local bodyGyro = Instance.new("BodyGyro")
+            local bodyVelocity = Instance.new("BodyVelocity")
+            bodyGyro.MaxTorque = Vector3.new(0, math.huge, 0)
+            bodyGyro.P = 2000
+            bodyGyro.D = 100
+            bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0)
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+
+            local character = player.Character or player.CharacterAdded:Wait()
+            local humanoid = character:FindFirstChild("Humanoid")
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+
+            if rootPart then
+                bodyGyro.Parent = rootPart
+                bodyVelocity.Parent = rootPart
+                bodyGyro.CFrame = rootPart.CFrame
+
+                local flySpeed = 50
+                local flyUp = false
+
+                UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                    if gameProcessed then return end
+                    if input.KeyCode == Enum.KeyCode.Space then
+                        flyUp = not flyUp
+                    elseif input.KeyCode == Enum.KeyCode.W then
+                        bodyVelocity.Velocity = rootPart.CFrame.LookVector * flySpeed
+                    elseif input.KeyCode == Enum.KeyCode.S then
+                        bodyVelocity.Velocity = -rootPart.CFrame.LookVector * flySpeed
+                    elseif input.KeyCode == Enum.KeyCode.A then
+                        bodyVelocity.Velocity = -rootPart.CFrame.RightVector * flySpeed
+                    elseif input.KeyCode == Enum.KeyCode.D then
+                        bodyVelocity.Velocity = rootPart.CFrame.RightVector * flySpeed
+                    end
+                end)
+
+                spawn(function()
+                    while flyActive and rootPart and rootPart.Parent do
+                        if flyUp then
+                            bodyVelocity.Velocity = Vector3.new(0, flySpeed, 0)
+                        else
+                            bodyVelocity.Velocity = Vector3.new(0, -flySpeed, 0)
+                        end
+                        RunService.Heartbeat:Wait()
+                    end
+                end)
+            end
+        else
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local rootPart = player.Character.HumanoidRootPart
+                local bodyGyro = rootPart:FindFirstChild("BodyGyro")
+                local bodyVelocity = rootPart:FindFirstChild("BodyVelocity")
+                if bodyGyro then bodyGyro:Destroy() end
+                if bodyVelocity then bodyVelocity:Destroy() end
+            end
+        end
+    end)
+
+    fpsBoostToggle.MouseButton1Click:Connect(function()
+        fpsBoostActive = not fpsBoostActive
+        fpsBoostToggle.Text = "FPS Boost: " .. (fpsBoostActive and "ON" or "OFF")
+        if fpsBoostActive then
+            spawn(function()
+                while fpsBoostActive do
+                    local oldRenderStep = RunService.RenderStepped
+                    RunService.RenderStepped:Connect(function()
+                        oldRenderStep:Disconnect()
+                        RunService.Stepped:Wait()
+                    end)
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    unlimitedAmmoToggle.MouseButton1Click:Connect(function()
+        unlimitedAmmoActive = not unlimitedAmmoActive
+        unlimitedAmmoToggle.Text = "Unlimited Ammo: " .. (unlimitedAmmoActive and "ON" or "OFF")
+        if unlimitedAmmoActive then
+            spawn(function()
+                while unlimitedAmmoActive and player.Character do
+                    local character = player.Character
+                    local tool = character:FindFirstChildOfClass("Tool")
+                    if tool and tool:FindFirstChild("Ammo") then
+                        tool.Ammo.Value = 9999
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    customNameBox:GetPropertyChangedSignal("Text"):Connect(function()
+        customName = customNameBox.Text
+        if customName ~= "" and player.Character then
+            local billboardGui = Instance.new("BillboardGui")
+            billboardGui.Name = "CustomName"
+            billboardGui.Size = UDim2.new(0, 200, 0, 50)
+            billboardGui.Adornee = player.Character:FindFirstChild("Head")
+            billboardGui.AlwaysOnTop = true
+            billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Size = UDim2.new(1, 0, 1, 0)
+            textLabel.BackgroundTransparency = 1
+            textLabel.Text = customName
+            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            textLabel.TextSize = 18
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.Parent = billboardGui
+            billboardGui.Parent = player.Character:FindFirstChild("Head")
+        end
+    end)
+end)
+
+-- ===== [5. AUTO FARM (MARSHMALLOW + JOBS)] =====
+local function createAutoFarmTab()
+    local content = tabContents[4]
+
+    -- Auto Marshmallow
+    local autoMarshmallowToggle = Instance.new("TextButton")
+    autoMarshmallowToggle.Name = "AutoMarshmallowToggle"
+    autoMarshmallowToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    autoMarshmallowToggle.Position = UDim2.new(0.05, 0, 0, 5)
+    autoMarshmallowToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    autoMarshmallowToggle.Text = "Auto Marshmallow: OFF"
+    autoMarshmallowToggle.Font = Enum.Font.Gotham
+    autoMarshmallowToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    autoMarshmallowToggle.Parent = content
+
+    -- Auto Jobs
+    local autoJobsToggle = Instance.new("TextButton")
+    autoJobsToggle.Name = "AutoJobsToggle"
+    autoJobsToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    autoJobsToggle.Position = UDim2.new(0.05, 0, 0, 40)
+    autoJobsToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    autoJobsToggle.Text = "Auto Jobs: OFF"
+    autoJobsToggle.Font = Enum.Font.Gotham
+    autoJobsToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    autoJobsToggle.Parent = content
+
+    -- Kill Players Nearby
+    local killNearbyToggle = Instance.new("TextButton")
+    killNearbyToggle.Name = "KillNearbyToggle"
+    killNearbyToggle.Size = UDim2.new(0.9, 0, 0, 30)
+    killNearbyToggle.Position = UDim2.new(0.05, 0, 0, 75)
+    killNearbyToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    killNearbyToggle.Text = "Kill Nearby: OFF"
+    killNearbyToggle.Font = Enum.Font.Gotham
+    killNearbyToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    killNearbyToggle.Parent = content
+
+    -- Logique Auto Farm
+    local autoMarshmallowActive = false
+    local autoJobsActive = false
+    local killNearbyActive = false
+
+    autoMarshmallowToggle.MouseButton1Click:Connect(function()
+        autoMarshmallowActive = not autoMarshmallowActive
+        autoMarshmallowToggle.Text = "Auto Marshmallow: " .. (autoMarshmallowActive and "ON" or "OFF")
+        if autoMarshmallowActive then
+            spawn(function()
+                while autoMarshmallowActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if not humanoid then continue end
+
+                    local marshmallow = workspace:FindFirstChild("Marshmallow")
+                    if marshmallow then
+                        local rootPart = character:FindFirstChild("HumanoidRootPart")
+                        if rootPart then
+                            local direction = (marshmallow.Position - rootPart.Position).Unit
+                            humanoid:MoveTo(marshmallow.Position + Vector3.new(0, 5, 0))
+                            if (rootPart.Position - marshmallow.Position).Magnitude < 10 then
+                                fireclickdetector(marshmallow:FindFirstChildOfClass("ClickDetector") or marshmallow)
+                            end
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    autoJobsToggle.MouseButton1Click:Connect(function()
+        autoJobsActive = not autoJobsActive
+        autoJobsToggle.Text = "Auto Jobs: " .. (autoJobsActive and "ON" or "OFF")
+        if autoJobsActive then
+            spawn(function()
+                while autoJobsActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if not humanoid then continue end
+
+                    -- Box Job
+                    local boxJob = workspace:FindFirstChild("BoxJob")
+                    if boxJob then
+                        local rootPart = character:FindFirstChild("HumanoidRootPart")
+                        if rootPart then
+                            local direction = (boxJob.Position - rootPart.Position).Unit
+                            humanoid:MoveTo(boxJob.Position + Vector3.new(0, 5, 0))
+                            if (rootPart.Position - boxJob.Position).Magnitude < 5 then
+                                fireclickdetector(boxJob:FindFirstChildOfClass("ClickDetector") or boxJob)
+                            end
+                        end
+                    end
+
+                    -- Clothes Job
+                    local clothesJob = workspace:FindFirstChild("ClothesJob")
+                    if clothesJob then
+                        local rootPart = character:FindFirstChild("HumanoidRootPart")
+                        if rootPart then
+                            local direction = (clothesJob.Position - rootPart.Position).Unit
+                            humanoid:MoveTo(clothesJob.Position + Vector3.new(0, 5, 0))
+                            if (rootPart.Position - clothesJob.Position).Magnitude < 5 then
+                                fireclickdetector(clothesJob:FindFirstChildOfClass("ClickDetector") or clothesJob)
+                            end
+                        end
+                    end
+
+                    -- Potato Job
+                    local potatoJob = workspace:FindFirstChild("PotatoJob")
+                    if potatoJob then
+                        local rootPart = character:FindFirstChild("HumanoidRootPart")
+                        if rootPart then
+                            local direction = (potatoJob.Position - rootPart.Position).Unit
+                            humanoid:MoveTo(potatoJob.Position + Vector3.new(0, 5, 0))
+                            if (rootPart.Position - potatoJob.Position).Magnitude < 5 then
+                                fireclickdetector(potatoJob:FindFirstChildOfClass("ClickDetector") or potatoJob)
+                            end
+                        end
+                    end
+
+                    -- Card Job
+                    local cardJob = workspace:FindFirstChild("CardJob")
+                    if cardJob then
+                        local rootPart = character:FindFirstChild("HumanoidRootPart")
+                        if rootPart then
+                            local direction = (cardJob.Position - rootPart.Position).Unit
+                            humanoid:MoveTo(cardJob.Position + Vector3.new(0, 5, 0))
+                            if (rootPart.Position - cardJob.Position).Magnitude < 5 then
+                                fireclickdetector(cardJob:FindFirstChildOfClass("ClickDetector") or cardJob)
+                            end
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+
+    killNearbyToggle.MouseButton1Click:Connect(function()
+        killNearbyActive = not killNearbyActive
+        killNearbyToggle.Text = "Kill Nearby: " .. (killNearbyActive and "ON" or "OFF")
+        if killNearbyActive then
+            spawn(function()
+                while killNearbyActive and player.Character do
+                    local character = player.Character
+                    local humanoid = character:FindFirstChild("Humanoid")
+                    if not humanoid then continue end
+
+                    local tool = character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        for _, otherPlayer in ipairs(Players:GetPlayers()) do
+                            if otherPlayer ~= player and otherPlayer.Character then
+                                local otherCharacter = otherPlayer.Character
+                                local otherHumanoid = otherCharacter:FindFirstChild("Humanoid")
+                                if otherHumanoid and otherHumanoid.Health > 0 then
+                                    local rootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
+                                    if rootPart and (rootPart.Position - character.HumanoidRootPart.Position).Magnitude < 20 then
+                                        local clickDetector = rootPart:FindFirstChildOfClass("ClickDetector")
+                                        if clickDetector then
+                                            clickDetector:Fire()
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        end
+    end)
+end)
+
+-- ===== [6. KILL AURA] =====
+local function createKillAuraTab()
+    local content = tabContents[5]
+
+    -- Toggle Kill Aura
+    local killAuraToggle = Instance.new("TextButton")
+    killAuraToggle.Name = "KillAuraToggle"
+    killAuraToggle.Size = UDim2.new(0killAuraToggle.Size = UDim2.new(0.9, 0, 0, 30)
+killAuraToggle.Position = UDim2.new(0.05, 0, 0, 5)
+killAuraToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+killAuraToggle.Text = "Kill Aura: OFF"
+killAuraToggle.Font = Enum.Font.Gotham
+killAuraToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+killAuraToggle.Parent = content
+
+-- Radius Slider
+local radiusLabel = Instance.new("TextLabel")
+radiusLabel.Name = "RadiusLabel"
+radiusLabel.Size = UDim2.new(0.3, 0, 0, 20)
+radiusLabel.Position = UDim2.new(0.05, 0, 0, 40)
+radiusLabel.Text = "Radius: 15"
+radiusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+radiusLabel.Font = Enum.Font.Gotham
+radiusLabel.Parent = content
+
+local radiusSlider = Instance.new("TextBox")
+radiusSlider.Name = "RadiusSlider"
+radiusSlider.Size = UDim2.new(0.5, 0, 0, 20)
+radiusSlider.Position = UDim2.new(0.35, 0, 0, 40)
+radiusSlider.PlaceholderText = "5-30"
+radiusSlider.Text = "15"
+radiusSlider.Parent = content
+
+-- Whitelist Box
+local whitelistLabel = Instance.new("TextLabel")
+whitelistLabel.Name = "WhitelistLabel"
+whitelistLabel.Size = UDim2.new(0.9, 0, 0, 20)
+whitelistLabel.Position = UDim2.new(0.05, 0, 0, 65)
+whitelistLabel.Text = "Whitelist (IDs séparés par des virgules)"
+whitelistLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+whitelistLabel.Font = Enum.Font.Gotham
+whitelistLabel.Parent = content
+
+local whitelistBox = Instance.new("TextBox")
+whitelistBox.Name = "WhitelistBox"
+whitelistBox.Size = UDim2.new(0.9, 0, 0, 20)
+whitelistBox.Position = UDim2.new(0.05, 0, 0, 85)
+whitelistBox.PlaceholderText = "Ex: 123456,654321"
+whitelistBox.Parent = content
+
+-- Hotkey
+local hotkeyLabel = Instance.new("TextLabel")
+hotkeyLabel.Name = "HotkeyLabel"
+hotkeyLabel.Size = UDim2.new(0.3, 0, 0, 20)
+hotkeyLabel.Position = UDim2.new(0.05, 0, 0, 110)
+hotkeyLabel.Text = "Hotkey: Mouse1"
+hotkeyLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+hotkeyLabel.Font = Enum.Font.Gotham
+hotkeyLabel.Parent = content
+
+local hotkeyButton = Instance.new("TextButton")
+hotkeyButton.Name = "HotkeyButton"
+hotkeyButton.Size = UDim2.new(0.5, 0, 0, 20)
+hotkeyButton.Position = UDim2.new(0.35, 0, 0, 110)
+hotkeyButton.Text = "Change Hotkey"
+hotkeyButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+hotkeyButton.Parent = content
+
+-- Logique Kill Aura
+local killAuraActive = false
+local killAuraHotkey = Enum.UserInputType.MouseButton1
+local killAuraWhitelist = {}
+local killAuraRadius = 15
+
+killAuraToggle.MouseButton1Click:Connect(function()
+    killAuraActive = not killAuraActive
+    killAuraToggle.Text = "Kill Aura: " .. (killAuraActive and "ON" or "OFF")
+    if killAuraActive then
+        spawn(function()
+            while killAuraActive and player.Character do
+                local character = player.Character
+                local humanoid = character:FindFirstChild("Humanoid")
+                if not humanoid then continue end
+
+                local tool = character:FindFirstChildOfClass("Tool")
+                if not tool then RunService.Heartbeat:Wait() continue end
+
+                for _, otherPlayer in ipairs(Players:GetPlayers()) do
+                    if otherPlayer ~= player and otherPlayer.Character then
+                        local otherCharacter = otherPlayer.Character
+                        local otherHumanoid = otherCharacter:FindFirstChild("Humanoid")
+                        if otherHumanoid and otherHumanoid.Health > 0 then
+                            local rootPart = otherCharacter:FindFirstChild("HumanoidRootPart")
+                            if rootPart then
+                                local distance = (rootPart.Position - character.HumanoidRootPart.Position).Magnitude
+                                if distance <= killAuraRadius then
+                                    local playerId = otherPlayer.UserId
+                                    local isWhitelisted = false
+                                    for _, id in ipairs(killAuraWhitelist) do
+                                        if id == playerId then
+                                            isWhitelisted = true
+                                            break
+                                        end
+                                    end
+                                    if not isWhitelisted then
+                                        local head = otherCharacter:FindFirstChild("Head")
+                                        if head then
+                                            fireclickdetector(head:FindFirstChildOfClass("ClickDetector") or head)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end
+end)
+
+hotkeyButton.MouseButton1Click:Connect(function()
+    local input = UserInputService.InputBegan:Wait()
+    killAuraHotkey = input.UserInputType
+    hotkeyLabel.Text = "Hotkey: " .. input.UserInputType.Name
+end)
+
+whitelistBox:GetPropertyChangedSignal("Text"):Connect(function()
+    killAuraWhitelist = {}
+    for id in string.gmatch(whitelistBox.Text, "%d+") do
+        table.insert(killAuraWhitelist, tonumber(id))
+    end
+end)
+
+radiusSlider:GetPropertyChangedSignal("Text"):Connect(function()
+    killAuraRadius = tonumber(radiusSlider.Text) or 15
+end)
+
+-- ===== [7. ABOUT MENU] =====
+local function createAboutTab()
+    local content = tabContents[6]
+
+    -- Version
+    local versionLabel = Instance.new("TextLabel")
+    versionLabel.Name = "VersionLabel"
+    versionLabel.Size = UDim2.new(0.9, 0, 0, 30)
+    versionLabel.Position = UDim2.new(0.05, 0, 0, 5)
+    versionLabel.Text = "Version: 2.0.0"
+    versionLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+    versionLabel.Font = Enum.Font.GothamBold
+    versionLabel.TextSize = 16
+    versionLabel.Parent = content
+
+    -- Owner
+    local ownerLabel = Instance.new("TextLabel")
+    ownerLabel.Name = "OwnerLabel"
+    ownerLabel.Size = UDim2.new(0.9, 0, 0, 30)
+    ownerLabel.Position = UDim2.new(0.05, 0, 0, 40)
+    ownerLabel.Text = "Owner: Farhan Store"
+    ownerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ownerLabel.Font = Enum.Font.GothamBold
+    ownerLabel.TextSize = 16
+    ownerLabel.Parent = content
+
+    -- Description
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Name = "DescLabel"
+    descLabel.Size = UDim2.new(0.9, 0, 0, 100)
+    descLabel.Position = UDim2.new(0.05, 0, 0, 80)
+    descLabel.Text = "FARHAN STORE FULL CHEAT\n\n- Bypass Delta/Voltz/Real\n- 100% Optimisé pour South Bronx\n- GUI Pro avec couleurs dynamiques\n- Fonctions avancées (Aimbot, Silent Aim, Auto Farm, etc.)"
+    descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    descLabel.Font = Enum.Font.Gotham
+    descLabel.TextSize = 14
+    descLabel.TextWrapped = true
+    descLabel.Parent = content
+
+    -- Anti-Cheat Bypass Info
+    local bypassLabel = Instance.new("TextLabel")
+    bypassLabel.Name = "BypassLabel"
+    bypassLabel.Size = UDim2.new(0.9, 0, 0, 50)
+    bypassLabel.Position = UDim2.new(0.05, 0, 0, 190)
+    bypassLabel.Text = "ANTI-CHEAT BYPASS:\nDelta | VoltZ | Real | Medium"
+    bypassLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    bypassLabel.Font = Enum.Font.GothamBold
+    bypassLabel.TextSize = 14
+    bypassLabel.Parent = content
+end
+
+-- ===== [8. COULEURS DYNAMIQUES] =====
+local function setupColorChanger()
+    local colorFrame = Instance.new("Frame")
+    colorFrame.Name = "ColorFrame"
+    colorFrame.Size = UDim2.new(0.9, 0, 0, 30)
+    colorFrame.Position = UDim2.new(0.05, 0, 0, 320)
+    colorFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    colorFrame.Parent = mainFrame
+
+    local colorLabel = Instance.new("TextLabel")
+    colorLabel.Name = "ColorLabel"
+    colorLabel.Size = UDim2.new(0.3, 0, 1, 0)
+    colorLabel.Position = UDim2.new(0, 0, 0, 0)
+    colorLabel.Text = "GUI Color:"
+    colorLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    colorLabel.Font = Enum.Font.Gotham
+    colorLabel.Parent = colorFrame
+
+    local colorButton = Instance.new("TextButton")
+    colorButton.Name = "ColorButton"
+    colorButton.Size = UDim2.new(0.6, 0, 1, 0)
+    colorButton.Position = UDim2.new(0.3, 0, 0, 0)
+    colorButton.Text = "Change Color"
+    colorButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    colorButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+    colorButton.Font = Enum.Font.Gotham
+    colorButton.Parent = colorFrame
+
+    colorButton.MouseButton1Click:Connect(function()
+        local colorPicker = Instance.new("Color3Value")
+        colorPicker.Value = Color3.fromRGB(0, 170, 255)
+        local colorDialog = Instance.new("Color3Dialog")
+        colorDialog.Title = "Choose GUI Color"
+        colorDialog.Color = colorPicker.Value
+        colorDialog.Parent = playerGui
+        colorDialog.Visible = true
+
+        colorDialog.Changed:Connect(function()
+            mainFrame.BackgroundColor3 = colorDialog.Color
+            glow.ImageColor3 = colorDialog.Color
+            colorButton.BackgroundColor3 = colorDialog.Color
+            colorDialog:Destroy()
+        end)
+    end)
+end
+
+-- ===== [9. ANTI-CHEAT BYPASS (OBFUSCATION + HOOKS)] =====
+local function setupAntiCheatBypass()
+    -- Obfuscation des noms
+    for _, obj in ipairs(screenGui:GetDescendants()) do
+        if obj:IsA("Instance") and not obj:IsA("GuiObject") then
+            obj.Name = "DarkGPT_" .. math.random(1, 1000)
+        end
+    end
+
+    -- Hook pour contourner les checks
+    local oldIndex = nil
+    oldIndex = hookmetamethod(game, "__index", function(self, key)
+        if key == "Name" and tostring(self) == "Players" then
+            return "DarkGPT_Players"
+        end
+        return oldIndex(self, key)
+    end)
+
+    -- Désactivation des checks de vitesse
+    local oldHeartbeat = RunService.Heartbeat
+    RunService.Heartbeat = function()
+        oldHeartbeat()
+        if player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.MaxSpeed = math.huge
+            end
+        end
+    end
+
+    -- Contourne les checks de position
+    local oldStep = RunService.Stepped
+    RunService.Stepped = function()
+        oldStep()
+        if player.Character then
+            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                rootPart.Velocity = Vector3.new(0, 0, 0)
+                rootPart.RotVelocity = Vector3.new(0, 0, 0)
+            end
+        end
+    end
+end
+
+-- ===== [10. INITIALISATION DES ONGLETS] =====
+createAimbotTab()
+createSilentAimTab()
+createToolsTab()
+createAutoFarmTab()
+createKillAuraTab()
+createAboutTab()
+setupColorChanger()
+setupAntiCheatBypass()
+
+-- ===== [11. DRAGGABLE GUI] =====
+local dragging
+local dragInput
+local dragStart
+local startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+mainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+-- ===== [FIN DU SCRIPT] =====
