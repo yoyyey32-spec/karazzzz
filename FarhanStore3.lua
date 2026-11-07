@@ -1,10 +1,4 @@
---[[
-    FARHAN STORE - SOUTH BRONX FULL CHEAT
-    BY DARKGPT | ANTI-CHEAT BYPASS INCLU
-    SUPPORT : DELTA, VOLTZ, REAL, MEDIUM
-]]
-
--- ===== [1. GUI PRO AVEC COULEURS DYNAMIQUES] =====
+===== [1. GUI PRO AVEC COULEURS DYNAMIQUES] =====
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
