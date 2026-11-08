@@ -327,76 +327,91 @@ Stars.ZIndex = 12
 Stars.Parent = Main
 
 local StarColors = {
-    Color3.fromRGB(245, 242, 255),
-    Color3.fromRGB(174, 152, 255),
-    Color3.fromRGB(117, 184, 255)
+    Color3.fromRGB(255, 255, 255),
+    Color3.fromRGB(190, 165, 255),
+    Color3.fromRGB(125, 195, 255)
 }
 local StarRandom = Random.new()
-for i = 1, 12 do
+for i = 1, 20 do
     local star = Instance.new("Frame")
     star.Name = "FallingRay" .. i
-    star.Size = UDim2.fromOffset(14, 14)
+    star.Size = UDim2.fromOffset(22, 22)
     star.BackgroundTransparency = 1
     star.BorderSizePixel = 0
     star.Active = false
+    star.Visible = false
     star.ZIndex = 12
     star.Parent = Stars
 
     local rayColor = StarColors[(i % #StarColors) + 1]
+    local glow = Instance.new("Frame")
+    glow.Name = "Glow"
+    glow.AnchorPoint = Vector2.new(0.5, 0.5)
+    glow.Position = UDim2.fromScale(0.5, 0.5)
+    glow.Size = UDim2.fromOffset(10, 10)
+    glow.BackgroundColor3 = rayColor
+    glow.BackgroundTransparency = 0.45
+    glow.BorderSizePixel = 0
+    glow.ZIndex = 12
+    glow.Parent = star
+    round(glow, 10)
+
     local rayA = Instance.new("Frame")
     rayA.Name = "RayA"
     rayA.AnchorPoint = Vector2.new(0.5, 0.5)
     rayA.Position = UDim2.fromScale(0.5, 0.5)
-    rayA.Size = UDim2.fromOffset(2, StarRandom:NextInteger(9, 13))
+    rayA.Size = UDim2.fromOffset(3, StarRandom:NextInteger(13, 19))
     rayA.BackgroundColor3 = rayColor
-    rayA.BackgroundTransparency = StarRandom:NextNumber(0.12, 0.3)
+    rayA.BackgroundTransparency = 0.02
     rayA.BorderSizePixel = 0
     rayA.Rotation = 45
-    rayA.ZIndex = 12
+    rayA.ZIndex = 13
     rayA.Parent = star
-    round(rayA, 2)
+    round(rayA, 3)
 
     local rayB = Instance.new("Frame")
     rayB.Name = "RayB"
     rayB.AnchorPoint = Vector2.new(0.5, 0.5)
     rayB.Position = UDim2.fromScale(0.5, 0.5)
-    rayB.Size = UDim2.fromOffset(2, StarRandom:NextInteger(8, 12))
+    rayB.Size = UDim2.fromOffset(3, StarRandom:NextInteger(12, 17))
     rayB.BackgroundColor3 = rayColor
-    rayB.BackgroundTransparency = StarRandom:NextNumber(0.12, 0.3)
+    rayB.BackgroundTransparency = 0.02
     rayB.BorderSizePixel = 0
     rayB.Rotation = -45
-    rayB.ZIndex = 12
+    rayB.ZIndex = 13
     rayB.Parent = star
-    round(rayB, 2)
+    round(rayB, 3)
 
     local core = Instance.new("Frame")
     core.Name = "Core"
     core.AnchorPoint = Vector2.new(0.5, 0.5)
     core.Position = UDim2.fromScale(0.5, 0.5)
-    core.Size = UDim2.fromOffset(3, 3)
+    core.Size = UDim2.fromOffset(5, 5)
     core.BackgroundColor3 = Color3.new(1, 1, 1)
-    core.BackgroundTransparency = 0.08
+    core.BackgroundTransparency = 0
     core.BorderSizePixel = 0
-    core.ZIndex = 13
+    core.ZIndex = 14
     core.Parent = star
-    round(core, 3)
+    round(core, 5)
 
     task.spawn(function()
-        task.wait(StarRandom:NextNumber(0, 3))
+        task.wait(StarRandom:NextNumber(0, 1.2))
         while Alive and star.Parent do
-            local x = StarRandom:NextNumber(0.12, 0.95)
+            local x = StarRandom:NextNumber(0.08, 0.96)
             local startRotation = StarRandom:NextInteger(0, 359)
-            star.Position = UDim2.new(x, 0, 0, -15)
+            local duration = StarRandom:NextNumber(1.8, 3.2)
+            star.Position = UDim2.new(x, 0, 0, -18)
             star.Rotation = startRotation
             star.Visible = true
-            local fall = TweenService:Create(star, TweenInfo.new(StarRandom:NextNumber(2.8, 5), Enum.EasingStyle.Linear), {
-                Position = UDim2.new(math.max(0, x - StarRandom:NextNumber(0.07, 0.23)), 0, 1, 15),
-                Rotation = startRotation + 180
+            local fall = TweenService:Create(star, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+                Position = UDim2.new(math.clamp(x - StarRandom:NextNumber(0.04, 0.16), 0, 1), 0, 1, 18),
+                Rotation = startRotation + 220
             })
             fall:Play()
             fall.Completed:Wait()
+            star.Visible = false
             if not Alive then break end
-            task.wait(StarRandom:NextNumber(0.1, 0.8))
+            task.wait(StarRandom:NextNumber(0.05, 0.35))
         end
     end)
 end
@@ -872,7 +887,10 @@ end)
 
 bind(UIS.InputBegan, function(input, processed)
     if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed and os.clock() > SyntheticUntil then
-        stopFire()
+        releaseSynthetic()
+        ClickBusy = false
+        ActiveTool = nil
+        LastAutoTarget = nil
         ManualHeld = true
         markShotTarget()
     end
