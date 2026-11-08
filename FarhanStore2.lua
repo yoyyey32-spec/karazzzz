@@ -1,4 +1,4 @@
-print('[Farhan Macro V5.8] GALAXY EDGE ISOLATED START')
+print('[Farhan Macro V5.9] GALAXY EDGE ISOLATED START')
 local __macroOK, __macroERR = xpcall(function()
 
 local Players = game:GetService("Players")
@@ -103,7 +103,7 @@ local function styleText(object, size)
 end
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "FarhanStore_GalaxyEdge_V58_MACRO"
+Gui.Name = "FarhanStore_GalaxyEdge_V59_MACRO"
 Gui.ResetOnSpawn = false
 Gui.DisplayOrder = 400
 Gui.IgnoreGuiInset = true
@@ -333,25 +333,65 @@ local StarColors = {
 }
 local StarRandom = Random.new()
 for i = 1, 12 do
-    local star = Instance.new("TextLabel")
-    star.Name = "FallingStar" .. i
-    star.Size = UDim2.fromOffset(12, 14)
+    local star = Instance.new("Frame")
+    star.Name = "FallingRay" .. i
+    star.Size = UDim2.fromOffset(14, 14)
     star.BackgroundTransparency = 1
-    star.Text = i % 3 == 0 and "✦" or "✧"
-    star.Font = Enum.Font.GothamBold
-    star.TextSize = StarRandom:NextInteger(9, 13)
-    star.TextColor3 = StarColors[(i % #StarColors) + 1]
-    star.TextTransparency = StarRandom:NextNumber(0.08, 0.28)
+    star.BorderSizePixel = 0
     star.Active = false
     star.ZIndex = 12
     star.Parent = Stars
+
+    local rayColor = StarColors[(i % #StarColors) + 1]
+    local rayA = Instance.new("Frame")
+    rayA.Name = "RayA"
+    rayA.AnchorPoint = Vector2.new(0.5, 0.5)
+    rayA.Position = UDim2.fromScale(0.5, 0.5)
+    rayA.Size = UDim2.fromOffset(2, StarRandom:NextInteger(9, 13))
+    rayA.BackgroundColor3 = rayColor
+    rayA.BackgroundTransparency = StarRandom:NextNumber(0.12, 0.3)
+    rayA.BorderSizePixel = 0
+    rayA.Rotation = 45
+    rayA.ZIndex = 12
+    rayA.Parent = star
+    round(rayA, 2)
+
+    local rayB = Instance.new("Frame")
+    rayB.Name = "RayB"
+    rayB.AnchorPoint = Vector2.new(0.5, 0.5)
+    rayB.Position = UDim2.fromScale(0.5, 0.5)
+    rayB.Size = UDim2.fromOffset(2, StarRandom:NextInteger(8, 12))
+    rayB.BackgroundColor3 = rayColor
+    rayB.BackgroundTransparency = StarRandom:NextNumber(0.12, 0.3)
+    rayB.BorderSizePixel = 0
+    rayB.Rotation = -45
+    rayB.ZIndex = 12
+    rayB.Parent = star
+    round(rayB, 2)
+
+    local core = Instance.new("Frame")
+    core.Name = "Core"
+    core.AnchorPoint = Vector2.new(0.5, 0.5)
+    core.Position = UDim2.fromScale(0.5, 0.5)
+    core.Size = UDim2.fromOffset(3, 3)
+    core.BackgroundColor3 = Color3.new(1, 1, 1)
+    core.BackgroundTransparency = 0.08
+    core.BorderSizePixel = 0
+    core.ZIndex = 13
+    core.Parent = star
+    round(core, 3)
+
     task.spawn(function()
         task.wait(StarRandom:NextNumber(0, 3))
         while Alive and star.Parent do
-            local x = StarRandom:NextNumber(0.15, 0.95)
+            local x = StarRandom:NextNumber(0.12, 0.95)
+            local startRotation = StarRandom:NextInteger(0, 359)
             star.Position = UDim2.new(x, 0, 0, -15)
+            star.Rotation = startRotation
+            star.Visible = true
             local fall = TweenService:Create(star, TweenInfo.new(StarRandom:NextNumber(2.8, 5), Enum.EasingStyle.Linear), {
-                Position = UDim2.new(math.max(0, x - StarRandom:NextNumber(0.07, 0.23)), 0, 1, 15)
+                Position = UDim2.new(math.max(0, x - StarRandom:NextNumber(0.07, 0.23)), 0, 1, 15),
+                Rotation = startRotation + 180
             })
             fall:Play()
             fall.Completed:Wait()
@@ -380,22 +420,28 @@ EffectGradient.Transparency = NumberSequence.new({
 })
 EffectGradient.Parent = Effect
 
+local EffectSequence = 0
 local function playKillEffect()
     if not Alive or not State.KillEffect then return end
 
+    EffectSequence += 1
+    local sequence = EffectSequence
+
     if ActiveEffect then
-        ActiveEffect:Cancel()
+        pcall(function() ActiveEffect:Cancel() end)
+        ActiveEffect = nil
     end
 
-    Effect.BackgroundColor3 = Colors[State.Color]
+    Effect.Visible = true
+    Effect.BackgroundColor3 = Colors[State.Color] or Colors.Kuning
     Effect.Position = UDim2.new(0, 0, 1, 0)
-    Effect.BackgroundTransparency = 0.2
+    Effect.BackgroundTransparency = 0.12
 
-    ActiveEffect = TweenService:Create(
+    local tween = TweenService:Create(
         Effect,
         TweenInfo.new(
             Config.KillEffectDuration,
-            Enum.EasingStyle.Quad,
+            Enum.EasingStyle.Quart,
             Enum.EasingDirection.Out
         ),
         {
@@ -403,8 +449,15 @@ local function playKillEffect()
             BackgroundTransparency = 1
         }
     )
-
-    ActiveEffect:Play()
+    ActiveEffect = tween
+    tween.Completed:Connect(function()
+        if sequence == EffectSequence then
+            ActiveEffect = nil
+            Effect.BackgroundTransparency = 1
+            Effect.Position = UDim2.new(0, 0, 1, 0)
+        end
+    end)
+    tween:Play()
 end
 
 local GunKeys = {
@@ -679,16 +732,23 @@ local function watchHumanoid(humanoid)
         if hasKillCredit(humanoid) or recent then
             triggered = true
             playKillEffect()
-        else
-            -- Give replicated creator tags a short opportunity to arrive.
-            task.delay(0.18, function()
-                if Alive and State.KillEffect and not triggered and hasKillCredit(humanoid) then
+            RecentTargets[humanoid] = nil
+            return
+        end
+
+        task.spawn(function()
+            for attempt = 1, 5 do
+                task.wait(0.12)
+                if not Alive or not State.KillEffect or triggered then break end
+                local stillRecent = last and os.clock() - last <= Config.KillCreditWindow
+                if hasKillCredit(humanoid) or stillRecent then
                     triggered = true
                     playKillEffect()
+                    break
                 end
-            end)
-        end
-        RecentTargets[humanoid] = nil
+            end
+            RecentTargets[humanoid] = nil
+        end)
     end
     bind(humanoid.Died, checkDeath)
     bind(humanoid.HealthChanged, function(health)
@@ -991,7 +1051,7 @@ refreshColor()
 print("FARHAN STORE | Setting modules checked:", GunStats.Checked, "numeric fields changed:", GunStats.Changed)
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __macroOK then
-    warn('[Farhan Macro V5.8] STARTUP ERROR: ' .. tostring(__macroERR))
+    warn('[Farhan Macro V5.9] STARTUP ERROR: ' .. tostring(__macroERR))
     pcall(function()
         local p = game:GetService('Players').LocalPlayer:WaitForChild('PlayerGui')
         local old = p:FindFirstChild('FarhanMacroStartupError')
