@@ -26,7 +26,6 @@ if type(ENV.FarhanLiteCleanup) == "function" then
     pcall(ENV.FarhanLiteCleanup)
 end
 ENV.FarhanLiteCleanup = nil
--- Remove older GUI panels, including ones whose cleanup callback was lost.
 for _, child in ipairs(PlayerGui:GetChildren()) do
     if child:IsA('ScreenGui') and (child.Name:match('^FarhanStore_.*MACRO') or child.Name:match('^FarhanStore_GalaxyEdge') or child.Name == 'FarhanMacroStartupError') then
         pcall(function() child:Destroy() end)
@@ -218,7 +217,7 @@ local function makeToggle(name, y, key)
     return Toggle
 end
 
-local AutoButton = makeToggle("Force Auto", 59, "AutoFire")
+local AutoButton = makeToggle("Force Auto")
 local RapidFireButton = Instance.new("TextButton")
 RapidFireButton.Name = "RapidFireButton"
 RapidFireButton.Size = UDim2.fromOffset(189, 24)
