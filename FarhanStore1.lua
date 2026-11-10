@@ -1,4 +1,4 @@
-print('[Farhan FPS] V3.6 MIDNIGHT BLUE ISOLATED START')
+print('[Farhan FPS] V3.7 BROWN RADIUS EDITION START')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -15,7 +15,7 @@ if type(ENV.FarhanFPSOnlyCleanup) == 'function' then
     pcall(ENV.FarhanFPSOnlyCleanup)
 end
 ENV.FarhanFPSOnlyCleanup = nil
-local FPS_GUI_NAME = 'FarhanStore_FPS_MIDNIGHT_BLUE_V36'
+local FPS_GUI_NAME = 'FarhanStore_FPS_BROWN_RADIUS_V37'
 local function removeOldFPSPanels()
     for _, child in ipairs(PlayerGui:GetChildren()) do
         if child:IsA('ScreenGui') and child.Name ~= FPS_GUI_NAME and
@@ -32,6 +32,9 @@ local FontSaved = {}
 local FontGuards = {}
 local EffectGuards = {}
 local GraySky = Color3.fromRGB(105, 105, 105)
+local BrownLow = Color3.fromRGB(112, 76, 48)
+local BrownDark = Color3.fromRGB(86, 58, 38)
+local BrownLight = Color3.fromRGB(137, 98, 64)
 local CustomFont
 pcall(function() CustomFont = Font.fromId(12187372382) end)
 local Detached = {}
@@ -40,6 +43,9 @@ local OriginalQuality
 local OriginalLighting = {}
 local GUI, Main, EnableButton, LightButton, Status, PingLabel, FPSLabel
 local FPS, Ping = 0, nil
+local RenderRadius = 500
+local RadiusParts = setmetatable({}, {__mode = 'k'})
+local RadiusBox, RadiusLabel
 local Theme = {
     Back = Color3.fromRGB(6, 13, 23),
     Panel = Color3.fromRGB(10, 28, 48),
@@ -189,7 +195,7 @@ end
 
 local function isSafeDecoration(obj)
     if not obj:IsA('BasePart') or isProtected(obj) then return false end
-    if not obj.Anchored or obj.CanCollide or obj.CanTouch or obj.CanQuery then return false end
+    if not obj.Anchored then return false end
     if hasImportantAncestor(obj) then return false end
     if obj:FindFirstChildWhichIsA('ProximityPrompt', true) then return false end
     if obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
@@ -217,6 +223,67 @@ local function isGunStoreDisplay(obj)
     end
     if not store or not display then return false end
     if obj:FindFirstChildWhichIsA('ProximityPrompt', true) or obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
+    return true
+end
+
+local function isCarPart(obj)
+    if not obj or not obj:IsA('BasePart') then return false end
+    local current = obj
+    while current and current ~= Workspace do
+        if nameContains(current.Name, {'vehicle', 'car', 'sedan', 'suv', 'truck', 'van', 'bus', 'motorcycle', 'motorbike', 'bike', 'automobile'}) then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
+end
+
+local function isRadiusEligible(obj)
+    if not obj:IsA('BasePart') or isProtected(obj) or isCarPart(obj) then return false end
+    if not obj.Anchored then return false end
+    if hasImportantAncestor(obj) then return false end
+    if obj:FindFirstChildWhichIsA('ProximityPrompt', true)
+        or obj:FindFirstChildWhichIsA('ClickDetector', true)
+        or obj:FindFirstChildWhichIsA('TouchTransmitter', true) then return false end
+    return true
+end
+
+local function applyRadiusPart(obj, rootPosition)
+    if not obj or not obj.Parent or not RadiusParts[obj] then return end
+    local hide = (obj.Position - rootPosition).Magnitude > RenderRadius
+    if not Saved[obj] then Saved[obj] = {} end
+    if Saved[obj].LocalTransparencyModifier == nil then
+        local ok, original = pcall(function() return obj.LocalTransparencyModifier end)
+        if ok then Saved[obj].LocalTransparencyModifier = {original} end
+    end
+    local original = Saved[obj].LocalTransparencyModifier and Saved[obj].LocalTransparencyModifier[1] or 0
+    pcall(function()
+        obj.LocalTransparencyModifier = hide and 1 or original
+    end)
+end
+
+local function updateRenderRadius()
+    if not Enabled or not Alive then return end
+    local character = Player.Character
+    local root = character and character:FindFirstChild('HumanoidRootPart')
+    if not root then return end
+    local position = root.Position
+    for obj in pairs(RadiusParts) do
+        if obj and obj.Parent then
+            pcall(applyRadiusPart, obj, position)
+        else
+            RadiusParts[obj] = nil
+        end
+    end
+end
+
+local function setRenderRadius(value)
+    local parsed = tonumber(value)
+    if not parsed then return false end
+    RenderRadius = math.clamp(math.floor(parsed + 0.5), 75, 3000)
+    if RadiusBox then RadiusBox.Text = tostring(RenderRadius) end
+    if RadiusLabel then RadiusLabel.Text = 'RENDER RADIUS: ' .. RenderRadius end
+    updateRenderRadius()
     return true
 end
 
@@ -275,6 +342,20 @@ local function optimize(obj)
 
     if obj:IsA('BasePart') then
         if isProtected(obj) then return end
+        if isCarPart(obj) then
+            setSaved(obj, 'Material', Enum.Material.Plastic)
+            setSaved(obj, 'MaterialVariant', '')
+            setSaved(obj, 'Reflectance', 0)
+            setSaved(obj, 'CastShadow', false)
+            setSaved(obj, 'Color', BrownDark)
+            if obj:IsA('MeshPart') then
+                setSaved(obj, 'TextureID', '')
+                setSaved(obj, 'RenderFidelity', Enum.RenderFidelity.Performance)
+                pcall(function() setSaved(obj, 'DoubleSided', false) end)
+            end
+            return
+        end
+        if isRadiusEligible(obj) then RadiusParts[obj] = true end
         if isGunStoreDisplay(obj) then
             setSaved(obj, 'LocalTransparencyModifier', 1)
             setSaved(obj, 'CastShadow', false)
@@ -291,7 +372,7 @@ local function optimize(obj)
             or (nameContains(parentName, {'door'}) and nameContains(partName, {'panel', 'glass', 'window'}))
         if doorPanel and not nameContains(partName, {'handle', 'hinge', 'knob', 'frame', 'hitbox', 'collision'}) and obj.Transparency < 0.5 then
             setSaved(obj, 'Material', Enum.Material.Glass)
-            setSaved(obj, 'Color', Color3.fromRGB(110, 110, 110))
+            setSaved(obj, 'Color', Color3.fromRGB(105, 74, 48))
             setSaved(obj, 'Transparency', 0.48)
             setSaved(obj, 'Reflectance', 0)
             setSaved(obj, 'CastShadow', false)
@@ -314,11 +395,11 @@ local function optimize(obj)
         local gray = math.floor((c.R * 0.299 + c.G * 0.587 + c.B * 0.114) * 255 / 64 + .5) * 64
         gray = math.clamp(math.floor(gray / 64 + 0.5) * 64, 48, 176)
         if nameContains(n, {'road', 'street', 'asphalt', 'pavement'}) then
-            setSaved(obj, 'Color', Color3.fromRGB(72, 72, 72))
+            setSaved(obj, 'Color', BrownDark)
         elseif nameContains(n, {'sidewalk', 'concrete', 'curb'}) then
-            setSaved(obj, 'Color', Color3.fromRGB(112, 112, 112))
+            setSaved(obj, 'Color', BrownLight)
         elseif not hasImportantAncestor(obj) then
-            setSaved(obj, 'Color', Color3.fromRGB(gray, gray, gray))
+            setSaved(obj, 'Color', BrownLow)
         end
         setSaved(obj, 'Reflectance', 0)
         -- Preserve original Transparency: invisible helper/hitbox parts must stay invisible.
@@ -428,6 +509,7 @@ local function enable()
         if not ok then warn('[Farhan FPS] Scan error:', err) end
         task.wait()
     end
+    updateRenderRadius()
     Busy = false
     refresh()
 end
@@ -445,6 +527,7 @@ local function disable()
         Saved[obj] = nil
     end
     table.clear(Detached)
+    table.clear(RadiusParts)
     if OriginalQuality ~= nil then
         pcall(function() settings().Rendering.QualityLevel = OriginalQuality end)
         OriginalQuality = nil
@@ -461,7 +544,7 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_MIDNIGHT_BLUE_V36'
+GUI.Name = 'FarhanStore_FPS_BROWN_RADIUS_V37'
 GUI.ResetOnSpawn = false
 GUI.DisplayOrder = 350
 GUI.IgnoreGuiInset = true
@@ -469,7 +552,7 @@ GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GUI.Parent = PlayerGui
 
 Main = Instance.new('Frame')
-Main.Size = UDim2.fromOffset(225, 207)
+Main.Size = UDim2.fromOffset(225, 244)
 Main.Position = UDim2.new(0, 24, 0.5, -103)
 Main.BackgroundColor3 = Theme.Back
 Main.BorderSizePixel = 0
@@ -552,9 +635,35 @@ end
 EnableButton = makeButton(65)
 LightButton = makeButton(106)
 
+RadiusLabel = Instance.new('TextLabel')
+RadiusLabel.Size = UDim2.fromOffset(105, 25)
+RadiusLabel.Position = UDim2.fromOffset(14, 146)
+RadiusLabel.BackgroundTransparency = 1
+RadiusLabel.Text = 'RADIUS: ' .. RenderRadius
+RadiusLabel.TextColor3 = Theme.Muted
+RadiusLabel.TextSize = 11
+RadiusLabel.Font = Enum.Font.GothamMedium
+RadiusLabel.TextXAlignment = Enum.TextXAlignment.Left
+RadiusLabel.Parent = Main
+
+RadiusBox = Instance.new('TextBox')
+RadiusBox.Size = UDim2.fromOffset(82, 25)
+RadiusBox.Position = UDim2.new(1, -96, 0, 146)
+RadiusBox.BackgroundColor3 = Color3.fromRGB(11, 22, 40)
+RadiusBox.BorderSizePixel = 0
+RadiusBox.TextColor3 = Theme.Text
+RadiusBox.PlaceholderColor3 = Theme.Muted
+RadiusBox.PlaceholderText = '75-3000'
+RadiusBox.Text = tostring(RenderRadius)
+RadiusBox.TextSize = 12
+RadiusBox.Font = Enum.Font.GothamMedium
+RadiusBox.ClearTextOnFocus = false
+RadiusBox.Parent = Main
+corner(RadiusBox, 6)
+
 local Info = Instance.new('Frame')
 Info.Size = UDim2.new(1, -28, 0, 27)
-Info.Position = UDim2.fromOffset(14, 149)
+Info.Position = UDim2.fromOffset(14, 181)
 Info.BackgroundColor3 = Color3.fromRGB(11, 22, 40)
 Info.BorderSizePixel = 0
 Info.Parent = Main
@@ -578,7 +687,7 @@ PingLabel = infoLabel('PING: -- ms', UDim2.fromOffset(7, 0), UDim2.new(.57, -7, 
 FPSLabel = infoLabel('FPS: --', UDim2.new(.57, 0, 0, 0), UDim2.new(.43, -7, 1, 0), Enum.TextXAlignment.Right)
 Status = Instance.new('TextLabel')
 Status.Size = UDim2.new(1, -20, 0, 19)
-Status.Position = UDim2.fromOffset(10, 181)
+Status.Position = UDim2.fromOffset(10, 213)
 Status.BackgroundTransparency = 1
 Status.TextSize = 11
 Status.Font = Enum.Font.GothamMedium
@@ -602,7 +711,7 @@ local starPalette = {
     Color3.fromRGB(100, 188, 255),
     Color3.fromRGB(155, 213, 255)
 }
-for i = 1, 12 do
+for i = 1, 18 do
     local star = Instance.new('TextLabel')
     star.Name = 'FallingStar' .. i
     star.Size = UDim2.fromOffset(13, 15)
@@ -647,13 +756,22 @@ bind(LightButton.MouseButton1Click, function()
     applyLighting()
     refresh()
 end)
+bind(RadiusBox.FocusLost, function(enterPressed)
+    if not setRenderRadius(RadiusBox.Text) then
+        RadiusBox.Text = tostring(RenderRadius)
+        RadiusLabel.Text = 'RADIUS: ' .. RenderRadius
+    end
+end)
+
 bind(Minimize.MouseButton1Click, function()
     Minimized = not Minimized
     EnableButton.Visible = not Minimized
     LightButton.Visible = not Minimized
     Info.Visible = not Minimized
+    RadiusBox.Visible = not Minimized
+    RadiusLabel.Visible = not Minimized
     Status.Visible = not Minimized
-    Main.Size = Minimized and UDim2.fromOffset(225, 53) or UDim2.fromOffset(225, 207)
+    Main.Size = Minimized and UDim2.fromOffset(225, 53) or UDim2.fromOffset(225, 244)
     Minimize.Text = Minimized and '+' or '-'
 end)
 bind(UIS.InputBegan, function(input, processed)
@@ -712,6 +830,13 @@ task.spawn(function()
             end
         end
         task.wait(2)
+    end
+end)
+
+task.spawn(function()
+    while Alive do
+        if Enabled and not Busy then pcall(updateRenderRadius) end
+        task.wait(0.5)
     end
 end)
 
@@ -779,7 +904,7 @@ end)
 scanFonts(PlayerGui)
 scanFonts(GUI)
 refresh()
-print('FARHAN STORE | FPS MIDNIGHT BLUE V3.6 GUI READY')
+print('FARHAN STORE | FPS BROWN RADIUS V3.7 GUI READY')
 
 end, function(err) return tostring(err) .. '\n' .. debug.traceback() end)
 if not __ok then
