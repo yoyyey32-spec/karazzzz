@@ -38,7 +38,6 @@ local Alive = true
 local State = {
     AutoFire = false,
     Recoil = false,
-    Interact = false,
     KillEffect = false,
     Color = "Kuning",
     Visible = true
@@ -55,7 +54,9 @@ local Theme = {
 local Colors = {
     Kuning = Color3.fromRGB(255, 215, 45),
     Biru = Color3.fromRGB(35, 145, 255),
-    Merah = Color3.fromRGB(255, 55, 65)
+    Merah = Color3.fromRGB(255, 55, 65),
+    Oren = Color3.fromRGB(255, 140, 35),
+    RGB = Color3.fromRGB(255, 70, 190)
 }
 
 local Connections = {}
@@ -111,7 +112,7 @@ Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(215, 240)
+Main.Size = UDim2.fromOffset(215, 210)
 Main.Position = UDim2.new(0, 275, 0.5, -120)
 Main.BackgroundColor3 = Theme.Background
 Main.BackgroundTransparency = 0.06
@@ -214,14 +215,13 @@ local function makeToggle(name, y, key)
     return Toggle
 end
 
-local AutoButton = makeToggle("Auto Fire", 59, "AutoFire")
+local AutoButton = makeToggle("Force Auto", 59, "AutoFire")
 local RecoilButton = makeToggle("No Recoil", 87, "Recoil")
-local InteractButton = makeToggle("Fast Interact", 118, "Interact")
-local KillButton = makeToggle("Kill Effect", 149, "KillEffect")
+local KillButton = makeToggle("Kill Effect", 118, "KillEffect")
 
 local ColorLabel = Instance.new("TextLabel")
 ColorLabel.Size = UDim2.fromOffset(65, 25)
-ColorLabel.Position = UDim2.fromOffset(13, 185)
+ColorLabel.Position = UDim2.fromOffset(13, 154)
 ColorLabel.BackgroundTransparency = 1
 ColorLabel.Text = "Warna:"
 ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -230,7 +230,7 @@ styleText(ColorLabel, 12)
 
 local ColorButton = Instance.new("TextButton")
 ColorButton.Size = UDim2.fromOffset(109, 24)
-ColorButton.Position = UDim2.fromOffset(93, 185)
+ColorButton.Position = UDim2.fromOffset(93, 154)
 ColorButton.BackgroundColor3 = Theme.Secondary
 ColorButton.Text = ""
 ColorButton.BorderSizePixel = 0
@@ -266,8 +266,8 @@ Arrow.Parent = ColorButton
 styleText(Arrow, 10)
 
 local Dropdown = Instance.new("Frame")
-Dropdown.Size = UDim2.fromOffset(109, 81)
-Dropdown.Position = UDim2.fromOffset(93, 212)
+Dropdown.Size = UDim2.fromOffset(109, 133)
+Dropdown.Position = UDim2.fromOffset(93, 181)
 Dropdown.BackgroundColor3 = Theme.Background
 Dropdown.BorderSizePixel = 0
 Dropdown.Visible = false
@@ -285,7 +285,7 @@ local function refreshColor()
     ColorDot.BackgroundColor3 = Colors[State.Color]
 end
 
-for index, name in ipairs({"Kuning", "Biru", "Merah"}) do
+for index, name in ipairs({"Kuning", "Biru", "Merah", "Oren", "RGB"}) do
     local Option = Instance.new("TextButton")
     Option.Size = UDim2.new(1, -6, 0, 25)
     Option.Position = UDim2.fromOffset(3, (index - 1) * 26 + 2)
@@ -303,7 +303,7 @@ for index, name in ipairs({"Kuning", "Biru", "Merah"}) do
         State.Color = name
         DropdownOpen = false
         Dropdown.Visible = false
-        Main.Size = UDim2.fromOffset(215, 240)
+        Main.Size = UDim2.fromOffset(215, 210)
         Arrow.Text = "▼"
         refreshColor()
     end)
@@ -312,7 +312,7 @@ end
 bind(ColorButton.MouseButton1Click, function()
     DropdownOpen = not DropdownOpen
     Dropdown.Visible = DropdownOpen
-    Main.Size = UDim2.fromOffset(215, DropdownOpen and 306 or 240)
+    Main.Size = UDim2.fromOffset(215, DropdownOpen and 345 or 210)
     Arrow.Text = DropdownOpen and "▲" or "▼"
 end)
 
@@ -465,6 +465,14 @@ local function playKillEffect()
         }
     )
     ActiveEffect = tween
+    if State.Color == "RGB" then
+        task.spawn(function()
+            while Alive and sequence == EffectSequence and State.KillEffect and Effect.Parent do
+                Effect.BackgroundColor3 = Color3.fromHSV((os.clock() * 0.45) % 1, 0.9, 1)
+                task.wait(0.035)
+            end
+        end)
+    end
     tween.Completed:Connect(function()
         if sequence == EffectSequence then
             ActiveEffect = nil
@@ -825,22 +833,6 @@ bind(RecoilButton.MouseButton1Click, function()
     refreshButtons()
 end)
 
-bind(InteractButton.MouseButton1Click, function()
-    State.Interact = not State.Interact
-
-    if State.Interact then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                fastPrompt(obj)
-            end
-        end
-    else
-        restorePrompts()
-    end
-
-    refreshButtons()
-end)
-
 bind(KillButton.MouseButton1Click, function()
     State.KillEffect = not State.KillEffect
     refreshButtons()
@@ -901,7 +893,7 @@ bind(UIS.InputBegan, function(input, processed)
         Main.Visible = State.Visible
         Dropdown.Visible = false
         DropdownOpen = false
-        Main.Size = UDim2.fromOffset(215, 240)
+        Main.Size = UDim2.fromOffset(215, 210)
         Arrow.Text = "▼"
     end
 end)
@@ -1029,7 +1021,6 @@ local function cleanup()
 
     State.AutoFire = false
     State.Recoil = false
-    State.Interact = false
     State.KillEffect = false
     table.clear(RecentTargets)
 
