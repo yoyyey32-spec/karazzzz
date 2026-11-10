@@ -1,4 +1,4 @@
-print('[Farhan FPS] V3.7 BROWN RADIUS EDITION START')
+print('[Farhan FPS] V3.8 SMOOTH BROWN EDITION START')
 local __ok, __err = xpcall(function()
 local Players = game:GetService('Players')
 local Workspace = game:GetService('Workspace')
@@ -15,7 +15,7 @@ if type(ENV.FarhanFPSOnlyCleanup) == 'function' then
     pcall(ENV.FarhanFPSOnlyCleanup)
 end
 ENV.FarhanFPSOnlyCleanup = nil
-local FPS_GUI_NAME = 'FarhanStore_FPS_BROWN_RADIUS_V37'
+local FPS_GUI_NAME = 'FarhanStore_FPS_SMOOTH_BROWN_V38'
 local function removeOldFPSPanels()
     for _, child in ipairs(PlayerGui:GetChildren()) do
         if child:IsA('ScreenGui') and child.Name ~= FPS_GUI_NAME and
@@ -27,6 +27,7 @@ end
 removeOldFPSPanels()
 
 local Alive, Enabled, FullBright, Busy, Minimized = true, false, false, false, false
+local FastInteract = false
 local Saved = {}
 local FontSaved = {}
 local FontGuards = {}
@@ -41,10 +42,12 @@ local Detached = {}
 local Connections = {}
 local OriginalQuality
 local OriginalLighting = {}
-local GUI, Main, EnableButton, LightButton, Status, PingLabel, FPSLabel
+local GUI, Main, EnableButton, LightButton, Status, PingLabel, FPSLabel, FastInteractButton
 local FPS, Ping = 0, nil
 local RenderRadius = 500
 local RadiusParts = setmetatable({}, {__mode = 'k'})
+local RadiusState = setmetatable({}, {__mode = 'k'})
+local PromptCache = setmetatable({}, {__mode = 'k'})
 local RadiusBox, RadiusLabel
 local Theme = {
     Back = Color3.fromRGB(6, 13, 23),
@@ -126,6 +129,32 @@ local function hasImportantAncestor(obj)
         current = current.Parent
     end
     return false
+end
+
+
+local function isWeaponVisual(obj)
+    local tool = obj:FindFirstAncestorOfClass('Tool')
+    if not tool then return false end
+    local n = (tool.Name .. ' ' .. obj.Name):lower()
+    return nameContains(n, {'gun', 'pistol', 'rifle', 'shotgun', 'smg', 'weapon', 'revolver', 'ak47', 'm4', 'glock'})
+end
+
+local function isGunStoreWorld(obj)
+    local current = obj
+    while current and current ~= Workspace do
+        if nameContains(current.Name, {'gunstore', 'gun store', 'gunshop', 'gun shop', 'weaponstore', 'weapon shop', 'weapon shop'}) then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
+end
+
+local function isSafeGunStoreWorldPart(obj)
+    if not obj:IsA('BasePart') or not obj.Anchored then return false end
+    if nameContains(obj.Name, {'door', 'handle', 'button', 'register', 'counter', 'prompt', 'screen', 'terminal'}) then return false end
+    if obj:FindFirstChildWhichIsA('ProximityPrompt', true) or obj:FindFirstChildWhichIsA('ClickDetector', true) then return false end
+    return isGunStoreWorld(obj)
 end
 
 local function shootEffect(obj)
@@ -248,18 +277,21 @@ local function isRadiusEligible(obj)
     return true
 end
 
+
 local function applyRadiusPart(obj, rootPosition)
     if not obj or not obj.Parent or not RadiusParts[obj] then return end
     local hide = (obj.Position - rootPosition).Magnitude > RenderRadius
+    if RadiusState[obj] == hide then return end
     if not Saved[obj] then Saved[obj] = {} end
     if Saved[obj].LocalTransparencyModifier == nil then
         local ok, original = pcall(function() return obj.LocalTransparencyModifier end)
         if ok then Saved[obj].LocalTransparencyModifier = {original} end
     end
-    local original = Saved[obj].LocalTransparencyModifier and Saved[obj].LocalTransparencyModifier[1] or 0
-    pcall(function()
-        obj.LocalTransparencyModifier = hide and 1 or original
-    end)
+    local original = Saved[obj].LocalTransparencyModifier and Saved[obj].LocalTransparencyModifier[1]
+    if original == nil then original = 0 end
+    local desired = hide and 1 or original
+    pcall(function() obj.LocalTransparencyModifier = desired end)
+    RadiusState[obj] = hide
 end
 
 local function updateRenderRadius()
@@ -268,12 +300,17 @@ local function updateRenderRadius()
     local root = character and character:FindFirstChild('HumanoidRootPart')
     if not root then return end
     local position = root.Position
+    local processed = 0
     for obj in pairs(RadiusParts) do
         if obj and obj.Parent then
             pcall(applyRadiusPart, obj, position)
         else
             RadiusParts[obj] = nil
+            RadiusState[obj] = nil
         end
+        processed += 1
+        if processed % 350 == 0 then task.wait() end
+        if not Alive or not Enabled then return end
     end
 end
 
@@ -289,6 +326,7 @@ end
 
 local function optimize(obj)
     if not Alive or not Enabled or not obj or not obj.Parent then return end
+    if obj:IsA('ProximityPrompt') then PromptCache[obj] = true; return end
     if GUI and (obj == GUI or obj:IsDescendantOf(GUI)) then return end
 
     if visualEffect(obj) then
@@ -316,6 +354,55 @@ local function optimize(obj)
         setSaved(obj, 'Shadows', false)
         if nameContains(obj.Name, {'muzzle', 'flash', 'gunfire', 'shot', 'gunfx'}) then
             setSaved(obj, 'Enabled', false)
+        end
+        return
+    end
+
+
+    if isWeaponVisual(obj) then
+        if obj:IsA('Decal') or obj:IsA('Texture') then
+            setSaved(obj, 'Transparency', 1)
+            return
+        elseif obj:IsA('SurfaceAppearance') then
+            setSaved(obj, 'ColorMap', '')
+            setSaved(obj, 'NormalMap', '')
+            setSaved(obj, 'MetalnessMap', '')
+            setSaved(obj, 'RoughnessMap', '')
+            return
+        elseif obj:IsA('SpecialMesh') then
+            setSaved(obj, 'TextureId', '')
+            return
+        elseif obj:IsA('MeshPart') then
+            setSaved(obj, 'TextureID', '')
+            setSaved(obj, 'RenderFidelity', Enum.RenderFidelity.Performance)
+            setSaved(obj, 'Material', Enum.Material.Plastic)
+            setSaved(obj, 'MaterialVariant', '')
+            setSaved(obj, 'Reflectance', 0)
+            setSaved(obj, 'Color', BrownDark)
+            setSaved(obj, 'CastShadow', false)
+            return
+        elseif obj:IsA('BasePart') then
+            setSaved(obj, 'Material', Enum.Material.Plastic)
+            setSaved(obj, 'MaterialVariant', '')
+            setSaved(obj, 'Reflectance', 0)
+            setSaved(obj, 'Color', BrownDark)
+            setSaved(obj, 'CastShadow', false)
+            return
+        end
+    end
+
+
+    if (obj:IsA('Decal') or obj:IsA('Texture') or obj:IsA('SurfaceAppearance') or obj:IsA('SpecialMesh'))
+        and isCarPart(obj.Parent or obj) then
+        if obj:IsA('Decal') or obj:IsA('Texture') then
+            setSaved(obj, 'Transparency', 1)
+        elseif obj:IsA('SurfaceAppearance') then
+            setSaved(obj, 'ColorMap', '')
+            setSaved(obj, 'NormalMap', '')
+            setSaved(obj, 'MetalnessMap', '')
+            setSaved(obj, 'RoughnessMap', '')
+        elseif obj:IsA('SpecialMesh') then
+            setSaved(obj, 'TextureId', '')
         end
         return
     end
@@ -357,8 +444,29 @@ local function optimize(obj)
         end
         if isRadiusEligible(obj) then RadiusParts[obj] = true end
         if isGunStoreDisplay(obj) then
-            setSaved(obj, 'LocalTransparencyModifier', 1)
+            setSaved(obj, 'Material', Enum.Material.Plastic)
+            setSaved(obj, 'MaterialVariant', '')
+            setSaved(obj, 'Color', BrownDark)
+            setSaved(obj, 'Reflectance', 0)
             setSaved(obj, 'CastShadow', false)
+            if obj:IsA('MeshPart') then
+                setSaved(obj, 'TextureID', '')
+                setSaved(obj, 'RenderFidelity', Enum.RenderFidelity.Performance)
+                pcall(function() setSaved(obj, 'DoubleSided', false) end)
+            end
+            return
+        end
+        if isSafeGunStoreWorldPart(obj) then
+            setSaved(obj, 'Material', Enum.Material.Plastic)
+            setSaved(obj, 'MaterialVariant', '')
+            setSaved(obj, 'Color', BrownLow)
+            setSaved(obj, 'Reflectance', 0)
+            setSaved(obj, 'CastShadow', false)
+            if obj:IsA('MeshPart') then
+                setSaved(obj, 'TextureID', '')
+                setSaved(obj, 'RenderFidelity', Enum.RenderFidelity.Performance)
+                pcall(function() setSaved(obj, 'DoubleSided', false) end)
+            end
             return
         end
         if isFoliage(obj) or isSafeDecoration(obj) then
@@ -471,6 +579,7 @@ local function refresh()
     if not Alive or not EnableButton then return end
     EnableButton.BackgroundColor3 = Enabled and Theme.On or Theme.Off
     LightButton.BackgroundColor3 = FullBright and Theme.On or Theme.Off
+    if FastInteractButton then FastInteractButton.BackgroundColor3 = FastInteract and Theme.On or Theme.Off end
     EnableButton.Text = 'Enabled'
     LightButton.Text = 'Light'
     Status.Text = Busy and 'PROCESSING...' or (Enabled and 'EXTREME ACTIVE' or 'READY')
@@ -481,8 +590,9 @@ local function scan(root)
     local objects = root:GetDescendants()
     for index, obj in ipairs(objects) do
         if not Alive or not Enabled then return end
+        if obj:IsA('ProximityPrompt') then PromptCache[obj] = true end
         pcall(optimize, obj)
-        if index % 180 == 0 then task.wait() end
+        if index % 500 == 0 then task.wait() end
     end
 end
 
@@ -528,6 +638,7 @@ local function disable()
     end
     table.clear(Detached)
     table.clear(RadiusParts)
+    table.clear(RadiusState)
     if OriginalQuality ~= nil then
         pcall(function() settings().Rendering.QualityLevel = OriginalQuality end)
         OriginalQuality = nil
@@ -544,7 +655,7 @@ local function corner(parent, radius)
 end
 
 GUI = Instance.new('ScreenGui')
-GUI.Name = 'FarhanStore_FPS_BROWN_RADIUS_V37'
+GUI.Name = 'FarhanStore_FPS_SMOOTH_BROWN_V38'
 GUI.ResetOnSpawn = false
 GUI.DisplayOrder = 350
 GUI.IgnoreGuiInset = true
@@ -552,7 +663,7 @@ GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 GUI.Parent = PlayerGui
 
 Main = Instance.new('Frame')
-Main.Size = UDim2.fromOffset(225, 244)
+Main.Size = UDim2.fromOffset(225, 282)
 Main.Position = UDim2.new(0, 24, 0.5, -103)
 Main.BackgroundColor3 = Theme.Back
 Main.BorderSizePixel = 0
@@ -661,9 +772,13 @@ RadiusBox.ClearTextOnFocus = false
 RadiusBox.Parent = Main
 corner(RadiusBox, 6)
 
+FastInteractButton = makeButton(177)
+FastInteractButton.Text = 'Fast Interact: OFF'
+FastInteractButton.ZIndex = 22
+
 local Info = Instance.new('Frame')
 Info.Size = UDim2.new(1, -28, 0, 27)
-Info.Position = UDim2.fromOffset(14, 181)
+Info.Position = UDim2.fromOffset(14, 218)
 Info.BackgroundColor3 = Color3.fromRGB(11, 22, 40)
 Info.BorderSizePixel = 0
 Info.Parent = Main
@@ -687,7 +802,7 @@ PingLabel = infoLabel('PING: -- ms', UDim2.fromOffset(7, 0), UDim2.new(.57, -7, 
 FPSLabel = infoLabel('FPS: --', UDim2.new(.57, 0, 0, 0), UDim2.new(.43, -7, 1, 0), Enum.TextXAlignment.Right)
 Status = Instance.new('TextLabel')
 Status.Size = UDim2.new(1, -20, 0, 19)
-Status.Position = UDim2.fromOffset(10, 213)
+Status.Position = UDim2.fromOffset(10, 250)
 Status.BackgroundTransparency = 1
 Status.TextSize = 11
 Status.Font = Enum.Font.GothamMedium
@@ -756,6 +871,27 @@ bind(LightButton.MouseButton1Click, function()
     applyLighting()
     refresh()
 end)
+
+bind(FastInteractButton.MouseButton1Click, function()
+    FastInteract = not FastInteract
+    FastInteractButton.Text = FastInteract and 'Fast Interact: ON' or 'Fast Interact: OFF'
+    FastInteractButton.BackgroundColor3 = FastInteract and Theme.On or Theme.Off
+    if FastInteract then
+        Status.Text = 'INDEXING INTERACTIONS'
+        task.spawn(function()
+            local objects = Workspace:GetDescendants()
+            for index, obj in ipairs(objects) do
+                if not Alive or not FastInteract then break end
+                if obj:IsA('ProximityPrompt') then PromptCache[obj] = true end
+                if index % 600 == 0 then task.wait() end
+            end
+            if Alive and FastInteract then Status.Text = 'PROMPT HELPER ACTIVE' end
+        end)
+    else
+        Status.Text = Enabled and 'EXTREME ACTIVE' or 'READY'
+    end
+end)
+
 bind(RadiusBox.FocusLost, function(enterPressed)
     if not setRenderRadius(RadiusBox.Text) then
         RadiusBox.Text = tostring(RenderRadius)
@@ -768,10 +904,11 @@ bind(Minimize.MouseButton1Click, function()
     EnableButton.Visible = not Minimized
     LightButton.Visible = not Minimized
     Info.Visible = not Minimized
+    FastInteractButton.Visible = not Minimized
     RadiusBox.Visible = not Minimized
     RadiusLabel.Visible = not Minimized
     Status.Visible = not Minimized
-    Main.Size = Minimized and UDim2.fromOffset(225, 53) or UDim2.fromOffset(225, 244)
+    Main.Size = Minimized and UDim2.fromOffset(225, 53) or UDim2.fromOffset(225, 282)
     Minimize.Text = Minimized and '+' or '-'
 end)
 bind(UIS.InputBegan, function(input, processed)
@@ -803,6 +940,7 @@ end)
 
 bind(game.DescendantAdded, function(obj)
     if not Alive then return end
+    if obj:IsA('ProximityPrompt') then PromptCache[obj] = true end
     if obj:IsDescendantOf(PlayerGui) or (GUI and obj:IsDescendantOf(GUI)) then
         applyFont(obj)
     end
@@ -818,14 +956,17 @@ task.spawn(function()
         if Enabled and not Busy then
             applyLighting()
             -- Weather/time scripts may replace effects; only revisit the small effects set.
-            for _, root in ipairs({Lighting, Workspace.CurrentCamera}) do
-                if root then
-                    for _, obj in ipairs(root:GetDescendants()) do
-                        if not Alive or not Enabled then break end
-                        if visualEffect(obj) or obj:IsA('Sky') or obj:IsA('Atmosphere') or obj:IsA('Clouds') then
-                            pcall(optimize, obj)
-                        end
-                    end
+            local camera = Workspace.CurrentCamera
+            if camera then
+                for _, obj in ipairs(camera:GetDescendants()) do
+                    if not Alive or not Enabled then break end
+                    if visualEffect(obj) then pcall(optimize, obj) end
+                end
+            end
+            for _, obj in ipairs(Lighting:GetChildren()) do
+                if not Alive or not Enabled then break end
+                if visualEffect(obj) or obj:IsA('Sky') or obj:IsA('Atmosphere') or obj:IsA('Clouds') then
+                    pcall(optimize, obj)
                 end
             end
         end
@@ -836,7 +977,41 @@ end)
 task.spawn(function()
     while Alive do
         if Enabled and not Busy then pcall(updateRenderRadius) end
-        task.wait(0.5)
+        task.wait(1.0)
+    end
+end)
+
+task.spawn(function()
+    while Alive do
+        if FastInteract then
+            local character = Player.Character
+            local root = character and character:FindFirstChild('HumanoidRootPart')
+            local nearest, nearestDistance = nil, math.huge
+            if root then
+                for prompt in pairs(PromptCache) do
+                    if prompt and prompt.Parent and prompt.Enabled then
+                        local host = prompt.Parent
+                        local part = host:IsA('BasePart') and host or host:FindFirstAncestorWhichIsA('BasePart')
+                        if part then
+                            local distance = (part.Position - root.Position).Magnitude
+                            local limit = math.max(prompt.MaxActivationDistance, 0)
+                            if distance <= limit and distance < nearestDistance then
+                                nearest, nearestDistance = prompt, distance
+                            end
+                        end
+                    else
+                        PromptCache[prompt] = nil
+                    end
+                end
+            end
+            if nearest and Status then
+                local key = tostring(nearest.KeyboardKeyCode):gsub('Enum.KeyCode.', '')
+                Status.Text = 'NEAR: ' .. (nearest.ActionText ~= '' and nearest.ActionText or nearest.ObjectText) .. ' [' .. key .. ']'
+            elseif Status then
+                Status.Text = 'NO NEARBY PROMPT'
+            end
+        end
+        task.wait(0.25)
     end
 end)
 
