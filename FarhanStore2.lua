@@ -69,6 +69,9 @@ local Buttons = {}
 local ActiveEffect
 local ActiveTool
 local LastFire = 0
+local player = game.Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+local char = player.Character or player.CharacterAdded:W
 local RecoilClock = 0
 local DropdownOpen = false
 local RecentTargets = {}
@@ -112,7 +115,7 @@ Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(215, 210)
+Main.Size = UDim2.fromOffset(215, 239)
 Main.Position = UDim2.new(0, 275, 0.5, -120)
 Main.BackgroundColor3 = Theme.Background
 Main.BackgroundTransparency = 0.06
@@ -216,12 +219,38 @@ local function makeToggle(name, y, key)
 end
 
 local AutoButton = makeToggle("Force Auto", 59, "AutoFire")
-local RecoilButton = makeToggle("No Recoil", 87, "Recoil")
-local KillButton = makeToggle("Kill Effect", 118, "KillEffect")
+local RapidFireButton = Instance.new("TextButton")
+RapidFireButton.Name = "RapidFireButton"
+RapidFireButton.Size = UDim2.fromOffset(189, 24)
+RapidFireButton.Position = UDim2.fromOffset(13, 87)
+RapidFireButton.BackgroundColor3 = Theme.Secondary
+RapidFireButton.BorderSizePixel = 0
+RapidFireButton.Text = "Rapid Fire"
+RapidFireButton.AutoButtonColor = false
+RapidFireButton.Parent = Main
+round(RapidFireButton, 6)
+styleText(RapidFireButton, 12)
+RapidFireButton.TextColor3 = Color3.fromRGB(220, 210, 255)
+
+local RapidFireStroke = Instance.new("UIStroke")
+RapidFireStroke.Color = Color3.fromRGB(151, 123, 255)
+RapidFireStroke.Thickness = 1.2
+RapidFireStroke.Parent = RapidFireButton
+
+local RapidFireGradient = Instance.new("UIGradient")
+RapidFireGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 29, 79)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 17, 39))
+})
+RapidFireGradient.Rotation = 0
+RapidFireGradient.Parent = RapidFireButton
+
+local RecoilButton = makeToggle("No Recoil", 117, "Recoil")
+local KillButton = makeToggle("Kill Effect", 148, "KillEffect")
 
 local ColorLabel = Instance.new("TextLabel")
 ColorLabel.Size = UDim2.fromOffset(65, 25)
-ColorLabel.Position = UDim2.fromOffset(13, 154)
+ColorLabel.Position = UDim2.fromOffset(13, 184)
 ColorLabel.BackgroundTransparency = 1
 ColorLabel.Text = "Warna:"
 ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -230,7 +259,7 @@ styleText(ColorLabel, 12)
 
 local ColorButton = Instance.new("TextButton")
 ColorButton.Size = UDim2.fromOffset(109, 24)
-ColorButton.Position = UDim2.fromOffset(93, 154)
+ColorButton.Position = UDim2.fromOffset(93, 184)
 ColorButton.BackgroundColor3 = Theme.Secondary
 ColorButton.Text = ""
 ColorButton.BorderSizePixel = 0
@@ -267,7 +296,7 @@ styleText(Arrow, 10)
 
 local Dropdown = Instance.new("Frame")
 Dropdown.Size = UDim2.fromOffset(109, 133)
-Dropdown.Position = UDim2.fromOffset(93, 181)
+Dropdown.Position = UDim2.fromOffset(93, 211)
 Dropdown.BackgroundColor3 = Theme.Background
 Dropdown.BorderSizePixel = 0
 Dropdown.Visible = false
@@ -303,7 +332,7 @@ for index, name in ipairs({"Kuning", "Biru", "Merah", "Oren", "RGB"}) do
         State.Color = name
         DropdownOpen = false
         Dropdown.Visible = false
-        Main.Size = UDim2.fromOffset(215, 210)
+        Main.Size = UDim2.fromOffset(215, 239)
         Arrow.Text = "▼"
         refreshColor()
     end)
@@ -312,7 +341,7 @@ end
 bind(ColorButton.MouseButton1Click, function()
     DropdownOpen = not DropdownOpen
     Dropdown.Visible = DropdownOpen
-    Main.Size = UDim2.fromOffset(215, DropdownOpen and 345 or 210)
+    Main.Size = UDim2.fromOffset(215, DropdownOpen and 350 or 239)
     Arrow.Text = DropdownOpen and "▲" or "▼"
 end)
 
@@ -605,7 +634,7 @@ local function targetFromPart(part)
     end
     return nil
 end
-
+        
 local function getCrosshairTarget()
     local camera = Workspace.CurrentCamera
     if not camera then return nil end
@@ -893,7 +922,7 @@ bind(UIS.InputBegan, function(input, processed)
         Main.Visible = State.Visible
         Dropdown.Visible = false
         DropdownOpen = false
-        Main.Size = UDim2.fromOffset(215, 210)
+        Main.Size = UDim2.fromOffset(215, 239)
         Arrow.Text = "▼"
     end
 end)
