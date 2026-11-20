@@ -1,8 +1,10 @@
-local code = [==[
 --[[
-  CAPEK KONTOL BIKIN BEGINIAN BIKIN MUMET ASU ]
+    FARHAN STORE HUB — South Bronx Full Version
+    Creator: FarhanStore
+    Fix: GUI Fallback, Auto Farm, Aimbot, ESP
 ]]
 
+--==================== SERVICES ====================
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local UserInputService  = game:GetService("UserInputService")
@@ -11,18 +13,19 @@ local Workspace         = game:GetService("Workspace")
 local CoreGui           = game:GetService("CoreGui")
 local Lighting          = game:GetService("Lighting")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 local Mouse       = LocalPlayer:GetMouse()
 
+--==================== CONFIG ====================
 local Config = {
     Aimbot = { CursorEnabled = false, SilentEnabled = false, HitChance = 100, HitPart = "Head", FOVRadius = 60, FriendCheck = true },
     KillAura = { Enabled = false, Range = 18 },
     ForceAuto = { Enabled = false, CPS = 15 },
     ESP = { Enabled = false, Box = true, Name = true },
-    Farm = { Amount = 50, AutoMarshmallow = false, MultiFarm = false },
+    Farm = { Amount = 50, AutoMarshmallow = false, MultiFarm = false, AutoBox = false, AutoPotato = false },
     Player = { FastWalk = false, WalkSpeed = 30, NoClip = false, FPSBoost = false, FullBright = false },
     Tools = { NoRecoil = false, NoSpread = false, RecoilPct = 100, SpreadPct = 100 },
     AntiVoid = true, AntiFling = true, AntiDetect = true
@@ -30,7 +33,7 @@ local Config = {
 
 local IgnoredPlayers = {}
 
--- EXTREME BYPASS
+--==================== BYPASS & PROTECTION ====================
 if hookmetamethod and not getgenv().FarhanHooked then
     getgenv().FarhanHooked = true
     local oldIndex = hookmetamethod(game, "__index", function(self, key)
@@ -55,14 +58,6 @@ if hookmetamethod and not getgenv().FarhanNamecallHooked then
     end)
 end
 
-if hookfunction and not getgenv().FarhanFireHooked then
-    getgenv().FarhanFireHooked = true
-    local oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, function(self, ...)
-        if self.Name == "AntiCheat" or self.Name == "Detection" then return end
-        return oldFire(self, ...)
-    end)
-end
-
 RunService.Heartbeat:Connect(function()
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
@@ -73,6 +68,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+--==================== UTIL ====================
 local function isAlive(plr)
     local c = plr.Character
     local h = c and c:FindFirstChildOfClass("Humanoid")
@@ -80,6 +76,7 @@ local function isAlive(plr)
 end
 local function isIgnored(plr) return IgnoredPlayers[plr.Name] == true end
 
+--==================== COMBAT LOGIC ====================
 RunService.RenderStepped:Connect(function()
     if not Config.Aimbot.CursorEnabled and not Config.Aimbot.SilentEnabled then return end
     if not LocalPlayer.Character then return end
@@ -137,6 +134,52 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
+--==================== ESP ====================
+local espCache = {}
+RunService.RenderStepped:Connect(function()
+    if not Drawing then return end
+    if not Config.ESP.Enabled then
+        for _, v in pairs(espCache) do for _, o in pairs(v) do if o.Remove then o:Remove() end end end
+        espCache = {}
+        return
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and isAlive(plr) then
+            if not espCache[plr] then
+                espCache[plr] = { Box = Drawing.new("Square"), Name = Drawing.new("Text") }
+                espCache[plr].Box.Thickness = 1
+                espCache[plr].Name.Size = 14; espCache[plr].Name.Center = true; espCache[plr].Name.Outline = true
+            end
+            local e = espCache[plr]
+            local hrp = plr.Character.HumanoidRootPart
+            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local head = Camera:WorldToViewportPoint(plr.Character.Head.Position)
+                local h = pos.Y - head.Y; local w = h / 2
+                e.Box.Visible = Config.ESP.Box
+                e.Box.Size = Vector2.new(w, h); e.Box.Position = Vector2.new(head.X - w/2, head.Y); e.Box.Color = Color3.fromRGB(255, 50, 50)
+                e.Name.Visible = Config.ESP.Name
+                e.Name.Text = plr.Name; e.Name.Position = Vector2.new(head.X, head.Y - 16); e.Name.Color = Color3.fromRGB(255, 255, 255)
+            else
+                e.Box.Visible = false; e.Name.Visible = false
+            end
+        end
+    end
+end)
+
+--==================== UI SYSTEM (FALLBACK) ====================
+if CoreGui:FindFirstChild("FarhanStoreUI") then CoreGui.FarhanStoreUI:Destroy() end
+if PlayerGui:FindFirstChild("FarhanStoreUI") then PlayerGui.FarhanStoreUI:Destroy() end
+
+local Screen = Instance.new("ScreenGui")
+Screen.Name = "FarhanStoreUI"
+Screen.ResetOnSpawn = false
+Screen.IgnoreGuiInset = true
+Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local success, err = pcall(function() Screen.Parent = CoreGui end)
+if not success then Screen.Parent = PlayerGui end
+
 local Theme = {
     bg = Color3.fromRGB(15, 15, 20), sidebar = Color3.fromRGB(10, 10, 15), panel = Color3.fromRGB(22, 22, 28),
     accent = Color3.fromRGB(0, 170, 255), text = Color3.fromRGB(255, 255, 255), textDim = Color3.fromRGB(150, 150, 160)
@@ -149,9 +192,6 @@ local function create(cls, props, children)
     return inst
 end
 local function corner(p, r) create("UICorner", {CornerRadius = UDim.new(0, r or 6), Parent = p}) end
-
-if CoreGui:FindFirstChild("FarhanStoreUI") then CoreGui.FarhanStoreUI:Destroy() end
-local Screen = create("ScreenGui", { Name = "FarhanStoreUI", ResetOnSpawn = false, IgnoreGuiInset = true, Parent = CoreGui })
 
 local Main = create("Frame", { Size = UDim2.fromOffset(700, 460), Position = UDim2.new(0.5, -350, 0.5, -230), BackgroundColor3 = Theme.bg, Active = true, Parent = Screen })
 corner(Main, 10)
@@ -299,7 +339,7 @@ local function refreshPopup()
     for _, c in ipairs(popupScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
-            local isOff = IgnoredPlayers[plr.Name] == true
+            local isOff = IgnoredPlayers[plr.Name] ==  true
             local btn = create("TextButton", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = isOff and Color3.fromRGB(200, 50, 50) or Theme.sidebar, Text = (isOff and "[ OFF ] " or "[ ON ] ") .. plr.Name, TextColor3 = Theme.text, Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Parent = popupScroll })
             corner(btn, 6)
             create("UIPadding", { PaddingLeft = UDim.new(0, 10), Parent = btn })
@@ -317,17 +357,5 @@ toggleBtn.MouseButton1Click:Connect(function()
     if popup.Visible then refreshPopup() end
 end)
 
-pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Farhan Store", Text = "v10 Extreme Loaded. Right Alt to Hide.", Duration = 3 }) end)
-print("[FarhanStore] v10 Extreme Loaded.")
-]==]
-
-if writefile then
-    writefile("FarhanStore.lua", code)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "Farhan Store",
-        Text = "File berhasil disimpan di folder Workspace executor lu!",
-        Duration = 5
-    })
-else
-    print("Executor lu tidak support writefile, min. Copy manual aja.")
-end
+pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Farhan Store", Text = "Loaded. Press Right Alt to Hide.", Duration = 3 }) end)
+print("[FarhanStore] Full Script Loaded.")
