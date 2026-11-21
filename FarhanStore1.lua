@@ -1,237 +1,261 @@
---[[
-    LAPET STYLE
-]]
-
---==================== SERVICES ====================
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
-local TweenService      = game:GetService("TweenService")
-local Workspace         = game:GetService("Workspace")
-local CoreGui           = game:GetService("CoreGui")
-local Lighting          = game:GetService("Lighting")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local TeleportService   = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
-local Camera      = Workspace.CurrentCamera
-local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
-local Mouse       = LocalPlayer:GetMouse()
+local Camera = Workspace.CurrentCamera
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Mouse = LocalPlayer:GetMouse()
 
---==================== CONFIG ====================
-local Config = {
-    Aimbot = { CursorEnabled = false, SilentEnabled = false, HitChance = 100, HitPart = "Head", FOVRadius = 200, FriendCheck = true },
-    KillAura = { Enabled = false, Range = 18, FireRate = 0.1, AutoHead = true },
-    JobAura = { Enabled = false, Range = 25, AutoEquip = true }, 
-    ESP = { Enabled = false, Box = true, Name = true },
-    Farm = { Amount = 50, AutoMarshmallow = false, MultiFarm = false, AutoRejoin = false },
-    Player = { FastWalk = false, WalkSpeed = 30, NoClip = false, FPSBoost = false, FullBright = false, ApproveAmmo = false, SpinEnabled = false, SpinSpeed = 5 },
-    Tools = { RecoilPct = 100, SpreadPct = 100, RapidFirePct = 100 },
-    Hotkeys = {
-        Aimbot = Enum.KeyCode.Z,
-        Silent = Enum.KeyCode.X,
-        Aura = Enum.KeyCode.C,
-        ESP = Enum.KeyCode.V
-    },
-    Bypass = { AntiVoid = true, AntiFling = true, AntiDetect = true }
+local Settings = {
+    Aimbot = { Enabled = false, Silent = false, FOV = 200, Bone = "Head", CheckFriend = true },
+    KillAura = { Enabled = false, Range = 18, Speed = 0.1, Headshot = true },
+    JobAura = { Enabled = false, Range = 25, AutoEquip = true },
+    Esp = { Enabled = false, Box = true, Name = true },
+    Farm = { Amount = 50, Mallow = false, Multi = false, Rejoin = false },
+    Player = { Walk = false, Speed = 30, Fly = false, FlySpeed = 50, Noclip = false, God = false, Fullbright = false, Fps = false, Ammo = false, Spin = false, SpinSpeed = 5 },
+    Tools = { Recoil = 100, Spread = 100, Rapid = 100, Reload = 100 },
+    Keys = { 
+        Aimbot = Enum.KeyCode.Z, 
+        Silent = Enum.KeyCode.X, 
+        Aura = Enum.KeyCode.C, 
+        Esp = Enum.KeyCode.V 
+    }
 }
 
 local IgnoredPlayers = {}
-local isDead = false
-local lastAmmo = 0
-local isReloading = false
-local spinAcc = 0
+local deadFlag = false
+local oldAmmo = 0
+local reloading = false
+local spinSpeed = 0
+local flyVel = nil
 
---==================== HOTKEY SYSTEM ====================
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Config.Hotkeys.Aimbot then
-        Config.Aimbot.CursorEnabled = not Config.Aimbot.CursorEnabled
-        print("Aimbot: " .. tostring(Config.Aimbot.CursorEnabled))
-    elseif input.KeyCode == Config.Hotkeys.Silent then
-        Config.Aimbot.SilentEnabled = not Config.Aimbot.SilentEnabled
-        print("Silent Aim: " .. tostring(Config.Aimbot.SilentEnabled))
-    elseif input.KeyCode == Config.Hotkeys.Aura then
-        Config.KillAura.Enabled = not Config.KillAura.Enabled
-        print("Kill Aura: " .. tostring(Config.KillAura.Enabled))
-    elseif input.KeyCode == Config.Hotkeys.ESP then
-        Config.ESP.Enabled = not Config.ESP.Enabled
-        print("ESP: " .. tostring(Config.ESP.Enabled))
+UserInputService.InputBegan:Connect(function(input, typing)
+    if typing then return end
+    
+    if input.KeyCode == Settings.Keys.Aimbot then
+        Settings.Aimbot.Enabled = not Settings.Aimbot.Enabled
+    elseif input.KeyCode == Settings.Keys.Silent then
+        Settings.Aimbot.Silent = not Settings.Aimbot.Silent
+    elseif input.KeyCode == Settings.Keys.Aura then
+        Settings.KillAura.Enabled = not Settings.KillAura.Enabled
+    elseif input.KeyCode == Settings.Keys.Esp then
+        Settings.Esp.Enabled = not Settings.Esp.Enabled
+    elseif input.KeyCode == Enum.KeyCode.F then
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool then tool:Destroy() end
+    elseif input.KeyCode == Enum.KeyCode.RightAlt then
+        if PlayerGui:FindFirstChild("FarhanUI") then
+            PlayerGui.FarhanUI.Enabled = not PlayerGui.FarhanUI.Enabled
+        end
     end
 end)
 
---==================== UTIL ====================
-local function isAlive(plr)
-    local c = plr.Character
+local function alive(p)
+    local c = p.Character
     local h = c and c:FindFirstChildOfClass("Humanoid")
     return c and h and h.Health > 0
 end
 
-local function isIgnored(plr) return IgnoredPlayers[plr.Name] == true end
+local function ignored(p)
+    return IgnoredPlayers[p.Name] == true
+end
 
-local function getClosestPlayerToMe(range)
-    local closest, dist = nil, range
-    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return nil end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and isAlive(plr) and not isIgnored(plr) then
-            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local d = (hrp.Position - myHRP.Position).Magnitude
-                if d < dist then dist = d; closest = plr end
+local function closestPlayer(distMax)
+    local closest, dist = nil, distMax
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and alive(p) and not ignored(p) then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local d = (root.Position - myRoot.Position).Magnitude
+                if d < dist then
+                    dist = d
+                    closest = p
+                end
             end
         end
     end
     return closest
 end
 
---==================== BYPASS & BACKGROUND ====================
 RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
     
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        if Config.Bypass.AntiVoid and hrp.Position.Y < -50 then hrp.CFrame = CFrame.new(0, 15, 0) end
-        if Config.Bypass.AntiFling then
-            hrp.RotVelocity = Vector3.zero
-            hrp.Velocity = Vector3.new(hrp.Velocity.X, math.max(hrp.Velocity.Y, -50), hrp.Velocity.Z)
-        end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if root then
+        if root.Position.Y < -50 then root.CFrame = CFrame.new(0, 15, 0) end
+        root.RotVelocity = Vector3.zero
+        root.Velocity = Vector3.new(root.Velocity.X, math.max(root.Velocity.Y, -50), root.Velocity.Z)
     end
     
-    -- Auto Rejoin
-    if Config.Farm.AutoRejoin then
+    if Settings.Farm.Rejoin then
         if hum.Health <= 0 then
-            if not isDead then
-                isDead = true
+            if not deadFlag then
+                deadFlag = true
                 task.wait(3)
                 pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
             end
         else
-            isDead = false
+            deadFlag = false
         end
     end
 
-    -- 360 Spin Character
-    if Config.Player.SpinEnabled and hrp then
-        spinAcc = spinAcc + (RunService.Heartbeat:Wait() * Config.Player.SpinSpeed)
-        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(spinAcc), 0)
+    if Settings.Player.Spin and root then
+        spinSpeed = spinSpeed + (RunService.Heartbeat:Wait() * Settings.Player.SpinSpeed)
+        root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(spinSpeed), 0)
+    end
+
+    if Settings.Player.God then
+        hum.MaxHealth = math.huge
+        hum.Health = math.huge
     end
 end)
 
---==================== STEALTH AMMO (RAYCAST) ====================
-RunService.Heartbeat:Connect(function()
-    if not Config.Player.ApproveAmmo then return end
+if hookmetamethod and not getgenv().GodModeHook then
+    getgenv().GodModeHook = true
+    local oldHook
+    oldHook = hookmetamethod(game, "__namecall", function(self, ...)
+        if Settings.Player.God and getnamecallmethod() == "TakeDamage" then
+            if self == LocalPlayer.Character or self == LocalPlayer.Character:FindFirstChild("Humanoid") then
+                return nil
+            end
+        end
+        return oldHook(self, ...)
+    end)
+end
+
+RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
-    local tool = char and char:FindFirstChildOfClass("Tool")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
     
+    if Settings.Player.Noclip and char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    if Settings.Player.Fly and root then
+        if not flyVel then
+            flyVel = Instance.new("BodyVelocity", root)
+            flyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            flyVel.Velocity = Vector3.zero
+        end
+        local move = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move -= Vector3.new(0,1,0) end
+        flyVel.Velocity = move * Settings.Player.FlySpeed
+    elseif flyVel then
+        flyVel:Destroy()
+        flyVel = nil
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if not Settings.Player.Ammo then return end
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
     if tool then
         local ammoVal = tool:FindFirstChild("Ammo") or tool:FindFirstChild("AmmoValue") or tool:FindFirstChild("Clip")
         if ammoVal and ammoVal:IsA("ValueBase") then
-            if ammoVal.Value > lastAmmo + 5 then
-                isReloading = true
+            if ammoVal.Value > oldAmmo + 5 then
+                reloading = true
                 task.wait(0.5)
-                isReloading = false
+                reloading = false
             end
-            
-            if not isReloading then
-                if ammoVal.Value < lastAmmo then
-                    -- Cek apakah crosshair beneran ngarah ke player
-                    local params = RaycastParams.new()
-                    params.FilterType = Enum.RaycastFilterType.Exclude
-                    params.FilterDescendantsInstances = {char}
+            if not reloading then
+                if ammoVal.Value < oldAmmo then
+                    local p = RaycastParams.new()
+                    p.FilterType = Enum.RaycastFilterType.Exclude
+                    p.FilterDescendantsInstances = {LocalPlayer.Character}
                     local ray = Camera:ScreenPointToRay(Mouse.X, Mouse.Y)
-                    local hit = Workspace:Raycast(ray.Origin, ray.Direction * 500, params)
+                    local hit = Workspace:Raycast(ray.Origin, ray.Direction * 500, p)
                     
-                    local hitPlayer = false
+                    local isPlayer = false
                     if hit and hit.Instance then
                         local model = hit.Instance:FindFirstAncestorOfClass("Model")
-                        if model and Players:GetPlayerFromCharacter(model) then
-                            hitPlayer = true
-                        end
+                        if model and Players:GetPlayerFromCharacter(model) then isPlayer = true end
                     end
-
-                    -- Kalau nggak kena player, balikin ammo
-                    if not hitPlayer then
+                    if not isPlayer then
                         task.wait(0.05)
-                        ammoVal.Value = lastAmmo 
+                        ammoVal.Value = oldAmmo
                     end
                 end
             end
-            lastAmmo = ammoVal.Value
+            oldAmmo = ammoVal.Value
         end
     end
 end)
 
---==================== COMBAT & JOB SAFETY ====================
 RunService.RenderStepped:Connect(function()
-    -- Aimbot
-    if Config.Aimbot.CursorEnabled or Config.Aimbot.SilentEnabled then
-        local closest, dist = nil, Config.Aimbot.FOVRadius
-        local origin = Config.Aimbot.CursorEnabled and Vector2.new(Mouse.X, Mouse.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    if Settings.Aimbot.Enabled or Settings.Aimbot.Silent then
+        local target, dist = nil, Settings.Aimbot.FOV
+        local origin = Settings.Aimbot.Enabled and Vector2.new(Mouse.X, Mouse.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer and isAlive(plr) and not isIgnored(plr) then
-                if not (Config.Aimbot.FriendCheck and LocalPlayer:IsFriendsWith(plr.UserId)) then
-                    local part = plr.Character:FindFirstChild(Config.Aimbot.HitPart)
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and alive(p) and not ignored(p) then
+                if not (Settings.Aimbot.CheckFriend and LocalPlayer:IsFriendsWith(p.UserId)) then
+                    local part = p.Character:FindFirstChild(Settings.Aimbot.Bone)
                     if part then
                         local sp, onScreen = Camera:WorldToViewportPoint(part.Position)
                         if onScreen then
                             local d = (Vector2.new(sp.X, sp.Y) - origin).Magnitude
-                            if d < dist then dist = d; closest = part end
+                            if d < dist then dist = d; target = part end
                         end
                     end
                 end
             end
         end
-        if closest then
-            if Config.Aimbot.SilentEnabled then
-                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, closest.Position)
-            elseif Config.Aimbot.CursorEnabled then
-                Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, closest.Position), 0.35)
+        if target then
+            if Settings.Aimbot.Silent then
+                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, target.Position)
+            elseif Settings.Aimbot.Enabled then
+                Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, target.Position), 0.35)
             end
         end
     end
 
-    -- Job Safety Aura (Auto Equip Weapon)
-    if Config.JobAura.Enabled and Config.JobAura.AutoEquip then
-        local nearbyPlayer = getClosestPlayerToMe(Config.JobAura.Range)
-        if nearbyPlayer then
+    if Settings.JobAura.Enabled and Settings.JobAura.AutoEquip then
+        local near = closestPlayer(Settings.JobAura.Range)
+        if near then
             local char = LocalPlayer.Character
-            if char then
-                local tool = char:FindFirstChildOfClass("Tool")
-                if not tool then
-                    local backpack = LocalPlayer:FindFirstChild("Backpack")
-                    local newTool = backpack and backpack:FindFirstChildOfClass("Tool")
-                    if newTool then
-                        char.Humanoid:EquipTool(newTool)
-                    end
-                end
+            if char and not char:FindFirstChildOfClass("Tool") then
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                local tool = bp and bp:FindFirstChildOfClass("Tool")
+                if tool then char.Humanoid:EquipTool(tool) end
             end
         end
     end
 end)
 
--- Kill Aura
-local auraAcc = 0
+local auraTimer = 0
 RunService.Heartbeat:Connect(function(dt)
-    if not Config.KillAura.Enabled then return end
-    auraAcc = auraAcc + dt
-    if auraAcc < Config.KillAura.FireRate then return end
-    auraAcc = 0
+    if not Settings.KillAura.Enabled then return end
+    auraTimer = auraTimer + dt
+    if auraTimer < Settings.KillAura.Speed then return end
+    auraTimer = 0
     
     local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
     
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and isAlive(plr) and not isIgnored(plr) then
-            local root = plr.Character:FindFirstChild("HumanoidRootPart")
-            if root and (root.Position - hrp.Position).Magnitude <= Config.KillAura.Range then
-                if Config.KillAura.AutoHead then
-                    local head = plr.Character:FindFirstChild("Head")
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and alive(p) and not ignored(p) then
+            local targetRoot = p.Character:FindFirstChild("HumanoidRootPart")
+            if targetRoot and (targetRoot.Position - root.Position).Magnitude <= Settings.KillAura.Range then
+                if Settings.KillAura.Headshot then
+                    local head = p.Character:FindFirstChild("Head")
                     if head then Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, head.Position) end
                 end
                 local tool = char:FindFirstChildOfClass("Tool")
@@ -242,12 +266,11 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
---==================== UI SYSTEM ====================
-if CoreGui:FindFirstChild("FarhanStoreUI") then CoreGui.FarhanStoreUI:Destroy() end
-if PlayerGui:FindFirstChild("FarhanStoreUI") then PlayerGui.FarhanStoreUI:Destroy() end
+if CoreGui:FindFirstChild("FarhanUI") then CoreGui.FarhanUI:Destroy() end
+if PlayerGui:FindFirstChild("FarhanUI") then PlayerGui.FarhanUI:Destroy() end
 
 local Screen = Instance.new("ScreenGui")
-Screen.Name = "FarhanStoreUI"
+Screen.Name = "FarhanUI"
 Screen.ResetOnSpawn = false
 Screen.IgnoreGuiInset = true
 local s, e = pcall(function() Screen.Parent = CoreGui end)
@@ -269,11 +292,6 @@ local function corner(p, r) create("UICorner", {CornerRadius = UDim.new(0, r or 
 local Main = create("Frame", { Size = UDim2.fromOffset(720, 480), Position = UDim2.new(0.5, -360, 0.5, -240), BackgroundColor3 = Theme.bg, Active = true, Parent = Screen })
 corner(Main, 10)
 create("UIStroke", {Color = Color3.fromRGB(50,50,60), Thickness = 1, Parent = Main})
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.RightAlt then Main.Visible = not Main.Visible end
-end)
 
 local TopBar = create("Frame", { Size = UDim2.new(1, 0, 0, 60), BackgroundColor3 = Theme.sidebar, Parent = Main })
 corner(TopBar, 10)
@@ -360,60 +378,61 @@ local function addDropdown(parent, text, options, init, cb)
     end)
 end
 
--- COMBAT TAB
-local c1 = addSection(tabs["Combat"], "Cursor & Silent Aim (Hotkeys: Z / X)")
-addCheck(c1, "Enable Cursor Aimbot", Config.Aimbot.CursorEnabled, function(v) Config.Aimbot.CursorEnabled = v end)
-addCheck(c1, "Enable Silent Aim", Config.Aimbot.SilentEnabled, function(v) Config.Aimbot.SilentEnabled = v end)
-addSlider(c1, "FOV Radius", 50, 600, Config.Aimbot.FOVRadius, function(v) Config.Aimbot.FOVRadius = v end)
-addDropdown(c1, "Target Bone", {"Head", "HumanoidRootPart", "UpperTorso"}, "Head", function(v) Config.Aimbot.HitPart = v end)
+local c1 = addSection(tabs["Combat"], "Cursor & Silent Aim (Z / X)")
+addCheck(c1, "Enable Cursor Aimbot", Settings.Aimbot.Enabled, function(v) Settings.Aimbot.Enabled = v end)
+addCheck(c1, "Enable Silent Aim", Settings.Aimbot.Silent, function(v) Settings.Aimbot.Silent = v end)
+addSlider(c1, "FOV Radius", 50, 600, Settings.Aimbot.FOV, function(v) Settings.Aimbot.FOV = v end)
+addDropdown(c1, "Target Bone", {"Head", "HumanoidRootPart", "UpperTorso"}, "Head", function(v) Settings.Aimbot.Bone = v end)
 
-local c2 = addSection(tabs["Combat"], "Standard Kill Aura (Hotkey: C)")
-addCheck(c2, "Enable Kill Aura", Config.KillAura.Enabled, function(v) Config.KillAura.Enabled = v end)
-addCheck(c2, "Auto Headshot", Config.KillAura.AutoHead, function(v) Config.KillAura.AutoHead = v end)
-addSlider(c2, "Range", 5, 50, Config.KillAura.Range, function(v) Config.KillAura.Range = v end)
-addSlider(c2, "Fire Rate Delay", 0.01, 1, Config.KillAura.FireRate, function(v) Config.KillAura.FireRate = v end)
+local c2 = addSection(tabs["Combat"], "Standard Kill Aura (C)")
+addCheck(c2, "Enable Kill Aura", Settings.KillAura.Enabled, function(v) Settings.KillAura.Enabled = v end)
+addCheck(c2, "Auto Headshot", Settings.KillAura.Headshot, function(v) Settings.KillAura.Headshot = v end)
+addSlider(c2, "Range", 5, 50, Settings.KillAura.Range, function(v) Settings.KillAura.Range = v end)
+addSlider(c2, "Fire Rate Delay", 0.01, 1, Settings.KillAura.Speed, function(v) Settings.KillAura.Speed = v end)
 
--- PLAYER TAB
 local p1 = addSection(tabs["Player"], "Main Settings")
-addCheck(p1, "Stealth Approve Ammo", Config.Player.ApproveAmmo, function(v) Config.Player.ApproveAmmo = v end)
-addCheck(p1, "Fast Walk", Config.Player.FastWalk, function(v) Config.Player.FastWalk = v end)
-addSlider(p1, "WalkSpeed", 16, 100, Config.Player.WalkSpeed, function(v) Config.Player.WalkSpeed = v end)
-addCheck(p1, "Full Bright", Config.Player.FullBright, function(v) Config.Player.FullBright = v end)
-addCheck(p1, "FPS Boost", Config.Player.FPSBoost, function(v) Config.Player.FPSBoost = v end)
+addCheck(p1, "Stealth Approve Ammo", Settings.Player.Ammo, function(v) Settings.Player.Ammo = v end)
+addCheck(p1, "Fast Walk", Settings.Player.Walk, function(v) Settings.Player.Walk = v end)
+addSlider(p1, "WalkSpeed", 16, 100, Settings.Player.Speed, function(v) Settings.Player.Speed = v end)
+addCheck(p1, "Fly Mode (WASD)", Settings.Player.Fly, function(v) Settings.Player.Fly = v end)
+addSlider(p1, "Fly Speed", 16, 200, Settings.Player.FlySpeed, function(v) Settings.Player.FlySpeed = v end)
+addCheck(p1, "NoClip", Settings.Player.Noclip, function(v) Settings.Player.Noclip = v end)
+addCheck(p1, "Godmode (Kebal)", Settings.Player.God, function(v) Settings.Player.God = v end)
+addCheck(p1, "Full Bright", Settings.Player.Fullbright, function(v) Settings.Player.Fullbright = v end)
+addCheck(p1, "FPS Boost", Settings.Player.Fps, function(v) Settings.Player.Fps = v end)
 
 local p2 = addSection(tabs["Player"], "Fun & Spin")
-addCheck(p2, "360 Character Spin", Config.Player.SpinEnabled, function(v) Config.Player.SpinEnabled = v end)
-addSlider(p2, "Spin Speed", 1, 50, Config.Player.SpinSpeed, function(v) Config.Player.SpinSpeed = v end)
+addCheck(p2, "360 Character Spin", Settings.Player.Spin, function(v) Settings.Player.Spin = v end)
+addSlider(p2, "Spin Speed", 1, 50, Settings.Player.SpinSpeed, function(v) Settings.Player.SpinSpeed = v end)
 
--- JOB TAB
 local j1 = addSection(tabs["Job"], "Safety & Rejoin")
 local rejoinBtn = create("TextButton", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = Theme.accent, Text = "Toggle Auto Rejoin", TextColor3 = Theme.text, Font = Enum.Font.GothamBold, TextSize = 13, Parent = j1 })
 corner(rejoinBtn, 6)
 rejoinBtn.MouseButton1Click:Connect(function()
-    Config.Farm.AutoRejoin = not Config.Farm.AutoRejoin
-    rejoinBtn.BackgroundColor3 = Config.Farm.AutoRejoin and Color3.fromRGB(0, 200, 100) or Theme.sidebar
+    Settings.Farm.Rejoin = not Settings.Farm.Rejoin
+    rejoinBtn.BackgroundColor3 = Settings.Farm.Rejoin and Color3.fromRGB(0, 200, 100) or Theme.sidebar
 end)
 
-addCheck(j1, "Job Safety Aura", Config.JobAura.Enabled, function(v) Config.JobAura.Enabled = v end)
-addCheck(j1, "Auto Equip Weapon", Config.JobAura.AutoEquip, function(v) Config.JobAura.AutoEquip = v end)
-addSlider(j1, "Aura Range", 10, 50, Config.JobAura.Range, function(v) Config.JobAura.Range = v end)
+addCheck(j1, "Job Safety Aura", Settings.JobAura.Enabled, function(v) Settings.JobAura.Enabled = v end)
+addCheck(j1, "Auto Equip Weapon", Settings.JobAura.AutoEquip, function(v) Settings.JobAura.AutoEquip = v end)
+addSlider(j1, "Aura Range", 10, 50, Settings.JobAura.Range, function(v) Settings.JobAura.Range = v end)
 
 local j2 = addSection(tabs["Job"], "Farm Automation")
-addCheck(j2, "Auto Marshmallow", Config.Farm.AutoMarshmallow, function(v) Config.Farm.AutoMarshmallow = v end)
-addSlider(j2, "Amount", 1, 100, Config.Farm.Amount, function(v) Config.Farm.Amount = v end)
-addCheck(j2, "Enable Multi Farm", Config.Farm.MultiFarm, function(v) Config.Farm.MultiFarm = v end)
+addCheck(j2, "Auto Marshmallow", Settings.Farm.Mallow, function(v) Settings.Farm.Mallow = v end)
+addSlider(j2, "Amount", 1, 100, Settings.Farm.Amount, function(v) Settings.Farm.Amount = v end)
+addCheck(j2, "Enable Multi Farm", Settings.Farm.Multi, function(v) Settings.Farm.Multi = v end)
 
--- TOOLS TAB
 local t1 = addSection(tabs["Tools"], "Weapon Modifications")
-addSlider(t1, "Recoil Reduction %", 0, 100, Config.Tools.RecoilPct, function(v) Config.Tools.RecoilPct = v end)
-addSlider(t1, "Spread Reduction %", 0, 100, Config.Tools.SpreadPct, function(v) Config.Tools.SpreadPct = v end)
-addSlider(t1, "Rapid Fire %", 100, 300, Config.Tools.RapidFirePct, function(v) Config.Tools.RapidFirePct = v end)
+addSlider(t1, "Recoil Reduction %", 0, 100, Settings.Tools.Recoil, function(v) Settings.Tools.Recoil = v end)
+addSlider(t1, "Spread Reduction %", 0, 100, Settings.Tools.Spread, function(v) Settings.Tools.Spread = v end)
+addSlider(t1, "Rapid Fire %", 100, 300, Settings.Tools.Rapid, function(v) Settings.Tools.Rapid = v end)
+addSlider(t1, "Reload Speed %", 100, 300, Settings.Tools.Reload, function(v) Settings.Tools.Reload = v end)
+create("TextLabel", { Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, Text = "Press [F] to Delete Tool", TextColor3 = Theme.textDim, Font = Enum.Font.Gotham, TextSize = 12, Parent = t1 })
 
--- ESP TAB
-local e1 = addSection(tabs["ESP"], "ESP Player (Hotkey: V)")
-addCheck(e1, "Enable ESP", Config.ESP.Enabled, function(v) Config.ESP.Enabled = v end)
-addCheck(e1, "Draw Box", Config.ESP.Box, function(v) Config.ESP.Box = v end)
-addCheck(e1, "Draw Name", Config.ESP.Name, function(v) Config.ESP.Name = v end)
+local e1 = addSection(tabs["ESP"], "ESP Player (V)")
+addCheck(e1, "Enable ESP", Settings.Esp.Enabled, function(v) Settings.Esp.Enabled = v end)
+addCheck(e1, "Draw Box", Settings.Esp.Box, function(v) Settings.Esp.Box = v end)
+addCheck(e1, "Draw Name", Settings.Esp.Name, function(v) Settings.Esp.Name = v end)
 
-pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Farhan Store", Text = "Jan Gasak Kali Kau Kampang", Duration = 3 }) end)
-print("[FarhanStore] v14 Loaded.")
+pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Farhan Store", Text = "v17 Loaded", Duration = 3 }) end)
+print("[FarhanStore] v17 Loaded.")
