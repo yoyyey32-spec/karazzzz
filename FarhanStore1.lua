@@ -49,9 +49,8 @@ UserInputService.InputBegan:Connect(function(input, typing)
         local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
         if tool then tool:Destroy() end
     elseif input.KeyCode == Enum.KeyCode.RightAlt then
-        if PlayerGui:FindFirstChild("FarhanUI") then
-            PlayerGui.FarhanUI.Enabled = not PlayerGui.FarhanUI.Enabled
-        end
+        local ui = PlayerGui:FindFirstChild("FarhanUI") or (gethui and gethui():FindFirstChild("FarhanUI"))
+        if ui then ui.Enabled = not ui.Enabled end
     end
 end)
 
@@ -266,9 +265,15 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-task.wait(2)
+local function getGuiParent()
+    if gethui then return gethui() end
+    if CoreGui then return CoreGui end
+    return PlayerGui
+end
 
-if CoreGui:FindFirstChild("FarhanUI") then CoreGui.FarhanUI:Destroy() end
+local parentGui = getGuiParent()
+
+if parentGui:FindFirstChild("FarhanUI") then parentGui.FarhanUI:Destroy() end
 if PlayerGui:FindFirstChild("FarhanUI") then PlayerGui.FarhanUI:Destroy() end
 
 local function buildGUI()
@@ -278,9 +283,7 @@ local function buildGUI()
     Screen.IgnoreGuiInset = true
     Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     Screen.Enabled = true
-    
-    local success = pcall(function() Screen.Parent = CoreGui end)
-    if not success then Screen.Parent = PlayerGui end
+    Screen.Parent = parentGui
     
     local Theme = {
         bg = Color3.fromRGB(15, 15, 20), sidebar = Color3.fromRGB(10, 10, 15), panel = Color3.fromRGB(22, 22, 28),
@@ -298,11 +301,6 @@ local function buildGUI()
     local Main = create("Frame", { Size = UDim2.fromOffset(720, 480), Position = UDim2.new(0.5, -360, 0.5, -240), BackgroundColor3 = Theme.bg, Active = true, Parent = Screen })
     corner(Main, 10)
     create("UIStroke", {Color = Color3.fromRGB(50,50,60), Thickness = 1, Parent = Main})
-    
-    UserInputService.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        if input.KeyCode == Enum.KeyCode.RightAlt then Main.Visible = not Main.Visible end
-    end)
     
     local TopBar = create("Frame", { Size = UDim2.new(1, 0, 0, 60), BackgroundColor3 = Theme.sidebar, Parent = Main })
     corner(TopBar, 10)
